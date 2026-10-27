@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SDLC Copilot</title>
+<style>
+  :root{--bg:#f6f7fb;--card:#fff;--ink:#1d2433;--muted:#6b7280;--line:#e5e7eb;--accent:#5b2d8e;--teal:#0f766e;
+        --ok:#15803d;--warn:#b45309;--bad:#b91c1c;--info:#2563eb;--mono:ui-monospace,SFMono-Regular,Menlo,monospace}
+  *{box-sizing:border-box} body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+  header{background:var(--accent);color:#fff;padding:14px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:600} header .sub{opacity:.85;font-size:12px}
+  header .spacer{flex:1} .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:.3px}
+  .badge.light{background:rgba(255,255,255,.18);color:#fff}
+  main{padding:20px 24px;max-width:1500px;margin:0 auto}
+  .row{display:flex;gap:16px;flex-wrap:wrap} .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;flex:1;min-width:220px}
+  .card h2{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .tile{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .tile .n{font-size:26px;font-weight:650;line-height:1.1} .tile .l{color:var(--muted);font-size:12px;margin-top:4px}
+  table{width:100%;border-collapse:collapse;font-size:13px} th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.4px} tr.click{cursor:pointer} tr.click:hover{background:#f3f0fa}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;border:1px solid transparent}
+  .READY{background:#dcfce7;color:var(--ok)} .CONDITIONAL{background:#fef3c7;color:var(--warn)} .MANUAL_REVIEW{background:#dbeafe;color:var(--info)} .NOT_READY{background:#fee2e2;color:var(--bad)}
+  .CRITICAL,.HIGH{background:#fee2e2;color:var(--bad)} .MEDIUM{background:#fef3c7;color:var(--warn)} .LOW{background:#e0f2fe;color:#075985} .INFO{background:#f3f4f6;color:#374151}
+  .passed,.ok{background:#dcfce7;color:var(--ok)} .failed,.FAIL{background:#fee2e2;color:var(--bad)} .skipped,.error{background:#f3f4f6;color:#374151}
+  .stage{background:#ede9fe;color:var(--accent)} .stage.awaiting{background:#fef3c7;color:var(--warn)} .stage.completed{background:#dcfce7;color:var(--ok)} .stage.failed,.stage.rejected{background:#fee2e2;color:var(--bad)}
+  button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer} button.ghost{background:#fff;color:var(--accent);border:1px solid var(--accent)} button.danger{background:var(--bad)} button:disabled{opacity:.5;cursor:default}
+  input,textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit} textarea{min-height:70px}
+  .pipeline{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 14px}
+  .step{font-size:11px;padding:4px 8px;border-radius:6px;background:#f3f4f6;color:var(--muted);border:1px solid var(--line)}
+  .step.done{background:#dcfce7;color:var(--ok);border-color:#bbf7d0} .step.now{background:var(--accent);color:#fff;border-color:var(--accent)} .step.pause{background:#fef3c7;color:var(--warn);border-color:#fde68a}
+  .tabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin:14px 0}
+  .tab{padding:8px 12px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;font-weight:600;font-size:13px} .tab.on{color:var(--accent);border-color:var(--accent)}
+  pre{background:#0f172a;color:#e2e8f0;padding:12px;border-radius:8px;overflow:auto;font:12px/1.4 var(--mono);max-height:520px;white-space:pre}
+  pre.diff .add{color:#86efac} pre.diff .del{color:#fca5a5}
+  .muted{color:var(--muted)} .small{font-size:12px} .mono{font-family:var(--mono);font-size:12px}
+  .approval{border:2px solid #fde68a;background:#fffbeb;border-radius:10px;padding:14px;margin-bottom:14px}
+  .approval h3{margin:0 0 8px;font-size:15px} .files{display:flex;gap:12px} .files ul{list-style:none;margin:0;padding:0;min-width:220px} .files li{padding:4px 6px;cursor:pointer;border-radius:6px;font-family:var(--mono);font-size:12px} .files li.on,.files li:hover{background:#ede9fe}
+  details summary{cursor:pointer;color:var(--accent);font-weight:600}
+  .trace td ul{margin:0;padding-left:16px}
+  .hidden{display:none}
+  @media (max-width:800px){main{padding:12px}.files{flex-direction:column}}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>AI-Powered SDLC Engineering Copilot</h1><div class="sub">AI generates · engineering tools validate · humans govern</div></div>
+  <div class="spacer"></div>
+  <span class="badge light" id="provider">provider: …</span>
+  <button class="ghost" style="background:#fff" onclick="showView('exec')">Executive view</button>
+</header>
+<main>
+  <!-- ============================== executive view -->
+  <section id="view-exec">
+    <div class="row" style="margin-bottom:16px">
+      <div class="card" style="flex:2">
+        <h2>Submit a feature request</h2>
+        <div class="row">
+          <div style="flex:1;min-width:200px"><input id="f-title" placeholder="Title, e.g. Customer contact update API"></div>
+        </div>
+        <div style="margin-top:8px"><textarea id="f-desc" placeholder="Develop an API allowing customers to update their contact information. Validate mandatory fields, prevent unauthorized modification, maintain an audit record and return appropriate API error responses."></textarea></div>
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+          <button onclick="submitFeature()">Run SDLC workflow</button>
+          <button class="ghost" onclick="fillExample()">Use example from the brief</button>
+          <span class="muted small" id="f-msg"></span>
+        </div>
+      </div>
+    </div>
+    <div class="tiles" id="tiles"></div>
+    <div class="row" style="margin-top:16px">
+      <div class="card" style="flex:2"><h2>Features</h2><table id="features"><thead><tr><th>Feature</th><th>Stage</th><th>Iter</th><th>Gates</th><th>Open findings</th><th>Readiness</th><th>Updated</th></tr></thead><tbody></tbody></table></div>
+      <div class="card"><h2>Quality-gate status (all features)</h2><table id="gates"><thead><tr><th>Gate</th><th>Passed</th><th>Failed</th></tr></thead><tbody></tbody></table>
+        <h2 style="margin-top:16px">Open findings by severity</h2><div id="sev"></div>
+        <h2 style="margin-top:16px">Observability events</h2><div id="events-summary" class="small"></div></div>
+    </div>
+  </section>
+
+  <!-- ============================== individual change view -->
+  <section id="view-feature" class="hidden">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <button class="ghost" onclick="showView('exec')">← Back</button>
+      <h2 style="margin:0;font-size:18px" id="ft-title"></h2>
+      <span class="pill stage" id="ft-stage"></span>
+      <span class="pill" id="ft-decision"></span>
+      <span class="muted small mono" id="ft-id"></span>
+    </div>
+    <div class="pipeline" id="pipeline"></div>
+    <div id="approval"></div>
+    <div class="tabs" id="tabs"></div>
+    <div id="tab-body"></div>
+  </section>
+</main>
+
+<script>
+const STAGES = ["received","analyzing_requirement","requirement_gate","designing","awaiting_design_approval","generating_code","generating_tests","executing_tests","static_analysis","security_validation","ai_code_review","evaluating_gates","remediating","awaiting_remediation_approval","revalidating","traceability_check","release_assessment","awaiting_release_approval","completed"];
+const TABS = ["Overview","Requirements","Design","Code","Tests","Findings","Gates","Traceability","Modifications","Events"];
+let current = null, currentTab = "Overview", timer = null, selectedFile = null, events = [];
+
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const pill = (v, cls) => `<span class="pill ${cls ?? esc(v)}">${esc(v)}</span>`;
+const fmt = (ts) => ts ? ts.replace("T"," ").replace(/\+.*$/,"") : "";
+async function api(path, opts) { const r = await fetch(path, opts); if (!r.ok) { let d=""; try { d = (await r.json()).detail } catch(e){} throw new Error(d || r.statusText); } return r.status === 204 ? null : r.json(); }
+
+function showView(v) { $("#view-exec").classList.toggle("hidden", v !== "exec"); $("#view-feature").classList.toggle("hidden", v !== "feature"); if (v === "exec") { current = null; clearInterval(timer); loadExec(); timer = setInterval(loadExec, 4000); } }
+function fillExample(){ $("#f-title").value = "Customer contact update API"; $("#f-desc").value = $("#f-desc").placeholder; }
+async function submitFeature(){
+  const title = $("#f-title").value.trim(), description = $("#f-desc").value.trim();
+  if (!title || description.length < 10) { $("#f-msg").textContent = "Title and a description of at least 10 characters are required."; return; }
+  const r = await api("/api/features", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({title, description, auto_run:true})});
+  $("#f-msg").textContent = "started " + r.feature_id; openFeature(r.feature_id);
+}
+
+// ---------------------------------------------------------------- executive
+async function loadExec(){
+  const h = await api("/health"); $("#provider").textContent = "provider: " + h.llm_provider;
+  const s = await api("/api/dashboard/summary");
+  const t = s.tests || {passed:0,failed:0,total:0};
+  const tiles = [
+    [s.features_processed, "features processed"], [s.in_progress, "in progress"], [s.awaiting_human, "awaiting human decision"],
+    [s.readiness.READY, "READY"], [s.readiness.CONDITIONAL, "CONDITIONAL"], [s.readiness.MANUAL_REVIEW, "MANUAL REVIEW"], [s.readiness.NOT_READY, "NOT READY"],
+    [s.requirement_coverage_avg == null ? "–" : s.requirement_coverage_avg + "%", "avg requirement coverage"], [`${t.passed}/${t.total}`, "tests passed (latest runs)"]
+  ];
+  $("#tiles").innerHTML = tiles.map(([n,l]) => `<div class="tile"><div class="n">${esc(n)}</div><div class="l">${esc(l)}</div></div>`).join("");
+  $("#features tbody").innerHTML = s.features.map(f => `<tr class="click" onclick="openFeature('${f.feature_id}')"><td><b>${esc(f.title)}</b><br><span class="mono muted">${f.feature_id}</span></td><td>${stagePill(f.stage)}</td><td>${f.iteration}</td><td>${f.gates_passed}/${f.gates_total}</td><td>${f.open_findings}</td><td>${f.decision ? pill(f.decision) : '<span class="muted">–</span>'}</td><td class="small muted">${fmt(f.updated_at)}</td></tr>`).join("") || `<tr><td colspan="7" class="muted">No features yet - submit one above.</td></tr>`;
+  const stageOrder = ["requirement","code","test","security","traceability","release"];
+  $("#gates tbody").innerHTML = stageOrder.filter(g => s.gate_status[g]).map(g => `<tr><td>${g}</td><td>${s.gate_status[g].passed}</td><td>${s.gate_status[g].failed}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">–</td></tr>`;
+  $("#sev").innerHTML = ["CRITICAL","HIGH","MEDIUM","LOW","INFO"].filter(k => s.open_findings_by_severity[k]).map(k => `${pill(k)} ${s.open_findings_by_severity[k]} `).join(" ") || '<span class="muted">none</span>';
+  $("#events-summary").innerHTML = Object.entries(s.events_by_type).map(([k,v]) => `<div>${esc(k)}: <b>${v}</b></div>`).join("") || '<span class="muted">–</span>';
+}
+function stagePill(st){ const cls = st.startsWith("awaiting") ? "awaiting" : st; return `<span class="pill stage ${cls}">${esc(st.replaceAll("_"," "))}</span>`; }
+
+// ------------------------------------------------------------------ feature
+async function openFeature(id){ clearInterval(timer); current = id; selectedFile = null; showViewFeature(); await refreshFeature(); timer = setInterval(refreshFeature, 3000); }
+function showViewFeature(){ $("#view-exec").classList.add("hidden"); $("#view-feature").classList.remove("hidden"); }
+async function refreshFeature(){
+  if (!current) return;
+  const f = await api("/api/features/" + current); events = await api(`/api/features/${current}/events`);
+  window.F = f;
+  $("#ft-title").textContent = f.request.title; $("#ft-id").textContent = f.feature_id;
+  $("#ft-stage").outerHTML = stagePill(f.stage).replace('class="pill', 'id="ft-stage" class="pill');
+  $("#ft-decision").outerHTML = f.release_assessment ? pill(f.release_assessment.decision).replace('class="pill', 'id="ft-decision" class="pill') : '<span id="ft-decision"></span>';
+  renderPipeline(f); renderApproval(f); renderTabs(f);
+  if (f.terminal) clearInterval(timer);
+}
+function renderPipeline(f){
+  const visited = new Set(f.transitions.map(t => t.from_stage)); visited.add(f.stage);
+  $("#pipeline").innerHTML = STAGES.map((s,i) => { let cls = "step"; if (s === f.stage) cls += f.paused ? " pause" : " now"; else if (visited.has(s) && f.transitions.some(t => t.from_stage === s)) cls += " done"; return `<span class="${cls}">${i+1}. ${s.replaceAll("_"," ")}</span>`; }).join("") + (["failed","rejected"].includes(f.stage) ? `<span class="step" style="background:#fee2e2;color:var(--bad)">${f.stage}</span>` : "");
+}
+function renderApproval(f){
+  const box = $("#approval");
+  if (!f.paused) { box.innerHTML = f.stage === "failed" ? `<div class="approval" style="border-color:#fca5a5;background:#fef2f2"><h3>Workflow failed</h3><div class="mono">${esc(f.error)}</div></div>` : ""; return; }
+  let body = "";
+  if (f.stage === "awaiting_design_approval") {
+    const d = f.technical_design, ra = f.requirement_analysis;
+    body = `<h3>Human design approval required (step 7)</h3><p>${esc(d.overview)}</p>
+      <p class="small"><b>Components:</b> ${d.components.map(c => esc(c.name)).join(" → ")}<br><b>API:</b> ${d.api.map(a => `<code>${a.method} ${esc(a.path)}</code>`).join(", ")}</p>
+      <details><summary>${ra.ambiguities.length} ambiguities & ${ra.assumptions.filter(a=>a.needs_confirmation).length} assumptions need your confirmation</summary><ul class="small">${ra.ambiguities.map(a=>`<li><b>${a.id}</b> ${esc(a.clarification_question)} <i>default: ${esc(a.proposed_default)}</i></li>`).join("")}${ra.assumptions.filter(a=>a.needs_confirmation).map(a=>`<li><b>${a.id}</b> ${esc(a.description)}</li>`).join("")}</ul></details>`;
+  } else if (f.stage === "awaiting_remediation_approval") {
+    const p = f.remediation_proposal, mods = f.modifications.filter(m => m.iteration === f.iteration);
+    body = `<h3>AI-generated correction awaits developer approval (FR-17) - iteration ${f.iteration}</h3>
+      <p><b>Failure:</b> ${esc(p.failure_summary)}<br><b>Probable cause:</b> ${esc(p.probable_cause)}<br><b>Rationale:</b> ${esc(p.rationale)} <span class="pill ${p.confidence==='high'?'passed':'MEDIUM'}">${p.confidence} confidence</span></p>
+      <p class="small">Addresses findings: ${p.addressed_finding_ids.map(i=>`<code>${esc(i)}</code>`).join(" ") || "–"}</p>
+      ${mods.map(m => `<details open><summary>${esc(m.file)} (${m.id})</summary>${diffHtml(m.diff)}</details>`).join("")}`;
+  } else if (f.stage === "awaiting_release_approval") {
+    const r = f.release_assessment;
+    body = `<h3>Release recommendation: ${pill(r.decision)} - human review / approval required (step 19)</h3><p>${esc(r.rationale)}</p>
+      ${r.policy_override ? `<p class="small" style="color:var(--bad)"><b>Policy override:</b> ${esc(r.policy_override)}</p>` : ""}
+      ${r.conditions.length ? `<p class="small"><b>Conditions:</b><ul class="small">${r.conditions.map(c=>`<li>${esc(c)}</li>`).join("")}</ul></p>` : ""}
+      ${r.residual_risks.length ? `<p class="small"><b>Residual risks:</b> ${r.residual_risks.map(esc).join("; ")}</p>` : ""}
+      <details><summary>Evidence (${r.evidence.length})</summary><ul class="small">${r.evidence.map(e=>`<li>${esc(e)}</li>`).join("")}</ul></details>`;
+  }
+  const cp = f.stage.replace("awaiting_","").replace("_approval","");
+  box.innerHTML = `<div class="approval">${body}<div style="margin-top:10px"><input id="approver" placeholder="your name" value="developer" style="max-width:220px;display:inline-block"> <input id="comment" placeholder="comment (required to send a design back for rework)" style="max-width:520px;display:inline-block;margin-left:6px"></div>
+    <div style="margin-top:10px;display:flex;gap:8px"><button onclick="decide('${cp}','approve')">Approve</button><button class="danger" onclick="decide('${cp}','reject')">Reject</button></div></div>`;
+}
+async function decide(cp, decision){
+  try { await api(`/api/features/${current}/approvals/${cp}`, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({decision, approver: $("#approver").value || "developer", comment: $("#comment").value})}); await refreshFeature(); timer = setInterval(refreshFeature, 3000); }
+  catch (e) { alert(e.message); }
+}
+function diffHtml(d){ return `<pre class="diff">${d.split("\n").map(l => l.startsWith("+") ? `<span class="add">${esc(l)}</span>` : l.startsWith("-") ? `<span class="del">${esc(l)}</span>` : esc(l)).join("\n")}</pre>`; }
+
+// --------------------------------------------------------------------- tabs
+function renderTabs(f){
+  $("#tabs").innerHTML = TABS.map(t => `<span class="tab ${t===currentTab?'on':''}" onclick="currentTab='${t}';renderTabs(window.F)">${t}</span>`).join("");
+  const r = { Overview: tabOverview, Requirements: tabRequirements, Design: tabDesign, Code: tabCode, Tests: tabTests, Findings: tabFindings, Gates: tabGates, Traceability: tabTrace, Modifications: tabMods, Events: tabEvents }[currentTab];
+  $("#tab-body").innerHTML = r(f);
+}
+const card = (title, inner) => `<div class="card" style="margin-bottom:12px"><h2>${title}</h2>${inner}</div>`;
+const none = (what) => `<span class="muted">${what} not produced yet.</span>`;
+function tabOverview(f){
+  const runs = Object.values(latestRuns(f)); const gates = latestGates(f);
+  return `<div class="row">${card("Request", `<p>${esc(f.request.description)}</p><p class="small muted">${esc(f.request.context)}</p>`)}
+    ${card("Quality gates", `<table>${Object.values(gates).map(g => `<tr><td>${g.gate}${g.mandatory?' <span class="muted small">(mandatory)</span>':''}</td><td>${pill(g.passed?'passed':'failed')}</td><td class="small muted">${g.checks.filter(c=>!c.passed).map(c=>esc(c.name)).join(", ")||"all checks ok"}</td></tr>`).join("") || `<tr><td class="muted">none yet</td></tr>`}</table>`)}</div>
+    <div class="row">${card("Engineering tool runs", `<table><thead><tr><th>Tool</th><th>Status</th><th>Summary</th><th>Time</th></tr></thead>${runs.map(r=>`<tr><td class="mono">${r.tool}</td><td>${pill(r.status)}</td><td>${esc(r.summary)}</td><td class="small muted">${r.duration_seconds}s</td></tr>`).join("")}</table>`)}
+    ${card("Remediation & comparison", f.remediation_history.length ? `<ul class="small">${f.remediation_history.map(h=>`<li>${esc(h)}</li>`).join("")}</ul>` : '<span class="muted">no remediation needed so far</span>')}</div>
+    ${f.release_assessment ? card("Release assessment", `${pill(f.release_assessment.decision)} ${esc(f.release_assessment.rationale)}${f.release_assessment.policy_override?`<p class="small" style="color:var(--bad)">${esc(f.release_assessment.policy_override)}</p>`:""}`) : ""}
+    ${card("Human decisions", f.approvals.length ? `<table>${f.approvals.map(a=>`<tr><td>${a.checkpoint}</td><td>${pill(a.decision==='approve'?'passed':'failed', a.decision==='approve'?'passed':'failed')} ${esc(a.decision)}</td><td>${esc(a.approver)}</td><td class="small muted">${esc(a.comment)}</td><td class="small muted">${fmt(a.recorded_at)}</td></tr>`).join("")}</table>` : '<span class="muted">none yet</span>')}`;
+}
+function latestRuns(f){ const m = {}; f.tool_runs.forEach(r => m[r.tool] = r); return m; }
+function latestGates(f){ const m = {}; f.gate_results.forEach(g => m[g.gate] = g); return m; }
+function tabRequirements(f){
+  const ra = f.requirement_analysis; if (!ra) return none("Requirement analysis");
+  const list = (items, fn) => `<ul class="small">${items.map(fn).join("")}</ul>`;
+  return `<p>${esc(ra.summary)}</p><div class="row">
+    ${card("Functional requirements", list(ra.functional_requirements, r=>`<li><b>${r.id}</b> ${esc(r.description)} <span class="muted">[${r.priority}]</span></li>`))}
+    ${card("Non-functional requirements", list(ra.non_functional_requirements, r=>`<li><b>${r.id}</b> ${esc(r.description)}</li>`))}</div>
+    <div class="row">${card("User stories", list(ra.user_stories, s=>`<li><b>${s.id}</b> As a ${esc(s.role)}, I want to ${esc(s.goal)} so that ${esc(s.benefit)} <span class="muted">(${s.requirement_ids.join(", ")})</span></li>`))}
+    ${card("Acceptance criteria", list(ra.acceptance_criteria, a=>`<li><b>${a.id}</b> <span class="muted">(${a.story_id})</span> <i>Given</i> ${esc(a.given)} <i>when</i> ${esc(a.when)} <i>then</i> ${esc(a.then)}</li>`))}</div>
+    <div class="row">${card("Business rules", list(ra.business_rules, b=>`<li><b>${b.id}</b> ${esc(b.description)}</li>`))}
+    ${card("Ambiguities (not silently converted into requirements)", list(ra.ambiguities, a=>`<li><b>${a.id}</b> ${pill(a.impact.toUpperCase(), a.impact==='high'?'HIGH':a.impact==='medium'?'MEDIUM':'LOW')} ${esc(a.description)}<br><i>Q:</i> ${esc(a.clarification_question)}<br><i>default:</i> ${esc(a.proposed_default)}</li>`))}</div>
+    <div class="row">${card("Assumptions", list(ra.assumptions, a=>`<li><b>${a.id}</b> ${esc(a.description)} ${a.needs_confirmation?pill("needs confirmation","MEDIUM"):""}</li>`))}
+    ${card("Dependencies & technical questions", list(ra.dependencies.concat(ra.technical_questions), d=>`<li>${esc(d)}</li>`))}</div>`;
+}
+function tabDesign(f){
+  const d = f.technical_design; if (!d) return none("Technical design");
+  return `<p>${esc(d.overview)}</p><p><b>Flow:</b> ${d.component_flow.map(esc).join(" → ")}</p>
+    ${card("Components", `<table>${d.components.map(c=>`<tr><td><b>${esc(c.name)}</b></td><td>${esc(c.responsibility)}</td><td class="small muted">${c.requirement_ids.join(", ")}</td></tr>`).join("")}</table>`)}
+    ${card("API", d.api.map(a=>`<details><summary><code>${a.method} ${esc(a.path)}</code> - ${esc(a.description)}</summary><div class="small"><b>AC:</b> ${a.acceptance_criteria_ids.join(", ")}<br><b>Errors:</b> ${a.error_responses.map(e=>`${e.status} ${esc(e.code||"")}`).join(", ")}</div><pre>${esc(JSON.stringify({request:a.request_schema,response:a.response_schema},null,2))}</pre></details>`).join(""))}
+    <div class="row">${card("Data model", d.data_model.map(e=>`<b>${esc(e.name)}</b><table>${e.fields.map(x=>`<tr><td class="mono">${esc(x.name)}</td><td>${esc(x.type)}</td><td>${x.required?"required":"optional"}</td><td class="small muted">${esc(x.constraints)}</td></tr>`).join("")}</table>`).join(""))}
+    ${card("Validation, errors, logging, security", `<b>Validation</b><ul class="small">${d.validation_rules.map(v=>`<li>${esc(v)}</li>`).join("")}</ul><b>Error handling</b><p class="small">${esc(d.error_handling)}</p><b>Logging</b><p class="small">${esc(d.logging)}</p><b>Security</b><ul class="small">${d.security.map(v=>`<li>${esc(v)}</li>`).join("")}</ul>`)}</div>
+    ${card("File plan", `<table>${d.file_plan.map(p=>`<tr><td class="mono">${esc(p.path)}</td><td>${esc(p.purpose)}</td><td class="small muted">${p.implements.join(", ")}</td></tr>`).join("")}</table>`)}`;
+}
+function tabCode(f){
+  const files = (f.code_bundle?.files||[]).concat(f.test_bundle?.files||[]); if (!files.length) return none("Code");
+  if (!selectedFile) selectedFile = files[0].path;
+  loadFile(selectedFile);
+  return `<div class="files"><ul>${files.map(x=>`<li class="${x.path===selectedFile?'on':''}" onclick="selectedFile='${x.path}';renderTabs(window.F)">${esc(x.path)} <span class="muted">${x.size}b</span></li>`).join("")}</ul><div style="flex:1;min-width:0"><div class="small muted">implements: ${(files.find(x=>x.path===selectedFile)?.implements||[]).join(", ")||"–"} · live from the isolated workspace</div><pre id="filebody">loading…</pre></div></div>
+    <p class="small muted">${esc(f.code_bundle?.notes||"")}</p>`;
+}
+async function loadFile(p){ try { const r = await api(`/api/features/${current}/workspace?path=${encodeURIComponent(p)}`); const el = $("#filebody"); if (el) el.textContent = r.content; } catch(e) {} }
+function tabTests(f){
+  const run = latestRuns(f).pytest; const cases = f.test_bundle?.test_cases||[];
+  if (!run && !cases.length) return none("Tests");
+  const res = {}; (run?.test_results||[]).forEach(t => res[t.name] = t);
+  return `${run ? `<p>${pill(run.status)} ${esc(run.summary)} <span class="muted small">(${run.duration_seconds}s)</span></p>` : ""}
+    ${card("Test cases mapped to acceptance criteria", `<table><thead><tr><th>Test</th><th>Category</th><th>AC</th><th>Result</th></tr></thead>${cases.map(c=>`<tr><td class="mono">${esc(c.name)}</td><td>${c.category}</td><td>${c.acceptance_criteria_ids.join(", ")}</td><td>${res[c.name]?pill(res[c.name].outcome):'<span class="muted">not run</span>'}${res[c.name]?.message?`<div class="small muted">${esc(res[c.name].message.slice(0,300))}</div>`:""}</td></tr>`).join("")}</table>`)}
+    ${run ? `<details><summary>pytest output</summary><pre>${esc(run.raw_output)}</pre></details>` : ""}`;
+}
+function tabFindings(f){
+  if (!f.findings.length) return none("Findings");
+  const order = {CRITICAL:0,HIGH:1,MEDIUM:2,LOW:3,INFO:4};
+  const rows = [...f.findings].sort((a,b)=>(a.status===b.status?0:a.status==="open"?-1:1)||order[a.severity]-order[b.severity]);
+  return card(`Findings (${f.findings.filter(x=>x.status==='open').length} open)`, `<table><thead><tr><th>Severity</th><th>Component</th><th>Finding</th><th>Evidence</th><th>Recommended fix</th><th>Source</th><th>Status</th></tr></thead>${rows.map(x=>`<tr style="${x.status!=='open'?'opacity:.55':''}"><td>${pill(x.severity)}<div class="small mono muted">${esc(x.id)}</div></td><td>${esc(x.component)}</td><td>${esc(x.finding)}</td><td class="small mono">${esc(x.evidence)}</td><td class="small">${esc(x.recommended_fix)}</td><td class="small">${esc(x.source)}<div class="muted">iter ${x.iteration}</div></td><td>${pill(x.status, x.status==='open'?'MEDIUM':'passed')}</td></tr>`).join("")}</table>`);
+}
+function tabGates(f){
+  if (!f.gate_results.length) return none("Gate results");
+  return f.gate_results.slice().reverse().map(g => card(`${g.gate} gate - ${g.passed?'PASSED':'FAILED'} <span class="muted">(iteration ${g.iteration}, ${fmt(g.evaluated_at)})</span>`, `<table>${g.checks.map(c=>`<tr><td class="mono">${esc(c.name)}</td><td>${pill(c.passed?'ok':'FAIL')}</td><td class="small">${esc(c.evidence)}</td></tr>`).join("")}</table>`)).join("");
+}
+function tabTrace(f){
+  const t = f.traceability; if (!t) return none("Traceability matrix");
+  const ul = (a) => a.length ? `<ul>${a.map(x=>`<li class="mono small">${esc(x)}</li>`).join("")}</ul>` : '<span class="muted">–</span>';
+  return `<div class="tiles" style="margin-bottom:12px"><div class="tile"><div class="n">${t.requirement_coverage}%</div><div class="l">requirements → code</div></div><div class="tile"><div class="n">${t.acceptance_criteria_coverage}%</div><div class="l">acceptance criteria → tests</div></div><div class="tile"><div class="n">${t.tests_with_results}%</div><div class="l">tests with execution results</div></div></div>
+    ${card("Requirement → stories → AC → design → code → tests → results", `<table class="trace"><thead><tr><th>Req</th><th>Stories</th><th>AC</th><th>Design components</th><th>Code files</th><th>Tests (result)</th></tr></thead>${t.rows.map(r=>`<tr><td><b>${r.requirement_id}</b></td><td>${r.story_ids.join(", ")||"–"}</td><td>${r.acceptance_criteria_ids.join(", ")||"–"}</td><td class="small">${r.design_components.join(", ")||"–"}</td><td>${ul(r.code_files)}</td><td>${r.tests.length?`<ul>${r.tests.map(x=>`<li class="mono small">${esc(x)} ${r.test_outcomes[x]?pill(r.test_outcomes[x]):''}</li>`).join("")}</ul>`:'<span class="muted">–</span>'}</td></tr>`).join("")}</table>`)}`;
+}
+function tabMods(f){
+  if (!f.modifications.length) return '<span class="muted">No AI-generated modifications were needed.</span>';
+  return f.modifications.map(m => card(`${m.id} · ${esc(m.file)} · iteration ${m.iteration} · ${m.applied_at?`applied ${fmt(m.applied_at)} after approval by <b>${esc(m.approved_by)}</b>`:'<span style="color:var(--warn)">awaiting approval</span>'}`, `<p class="small">${esc(m.reason)}</p><p class="small muted mono">before ${m.before_hash||"(new file)"} → after ${m.after_hash||"–"}</p>${diffHtml(m.diff)}`)).join("");
+}
+function tabEvents(f){
+  return card(`Observability event log (${events.length})`, `<table><thead><tr><th>Time</th><th>Type</th><th>Actor</th><th>Summary</th></tr></thead>${events.slice().reverse().map(e=>`<tr><td class="small muted mono">${fmt(e.ts)}</td><td><span class="pill ${e.type==='human_decision'?'MEDIUM':e.type==='error'?'HIGH':e.type==='gate_evaluation'?'LOW':e.type==='agent_call'?'stage':'INFO'}">${esc(e.type)}</span></td><td class="small">${esc(e.actor)}</td><td class="small">${esc(e.summary)}</td></tr>`).join("")}</table>`);
+}
+showView("exec");
+</script>
+</body>
+</html>

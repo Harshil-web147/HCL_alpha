@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 860" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="arr" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#475569"/></marker>
+    <style>
+      .box{fill:#fff;stroke:#94a3b8;stroke-width:1.2;rx:8}
+      .agent{fill:#f3e8ff;stroke:#7c3aed}
+      .tool{fill:#dcfce7;stroke:#15803d}
+      .gate{fill:#fef3c7;stroke:#b45309}
+      .human{fill:#dbeafe;stroke:#1d4ed8}
+      .infra{fill:#f1f5f9;stroke:#64748b}
+      .t{fill:#1e293b} .m{fill:#475569;font-size:11px} .s{fill:#475569;font-size:10px} .h{font-weight:700;font-size:14px}
+      .lane{fill:none;stroke:#cbd5e1;stroke-dasharray:6 4;rx:12}
+      .lanet{fill:#64748b;font-size:12px;font-weight:700;letter-spacing:1px}
+      .flow{stroke:#475569;stroke-width:1.6;fill:none;marker-end:url(#arr)}
+    </style>
+  </defs>
+
+  <text x="700" y="34" text-anchor="middle" class="t" font-size="21" font-weight="700">AI-Powered SDLC Engineering Copilot — Multi-Agent Architecture</text>
+  <text x="700" y="54" text-anchor="middle" class="m">AI generates · engineering tools validate · humans govern</text>
+
+  <!-- ===== Humans govern ===== -->
+  <rect x="20" y="70" width="1360" height="112" class="lane"/>
+  <text x="34" y="90" class="lanet">HUMANS GOVERN</text>
+  <rect x="40" y="102" width="230" height="62" class="box human"/>
+  <text x="155" y="124" text-anchor="middle" class="t h">Developer / Tech lead</text>
+  <text x="155" y="142" text-anchor="middle" class="m">submits the requirement; approves design,</text>
+  <text x="155" y="156" text-anchor="middle" class="m">each AI correction and the release</text>
+
+  <rect x="300" y="102" width="400" height="62" class="box human"/>
+  <text x="500" y="124" text-anchor="middle" class="t h">SDLC AI Dashboard + REST API (FastAPI)</text>
+  <text x="500" y="142" text-anchor="middle" class="m">Executive view · Individual change view · approval panel</text>
+  <text x="500" y="156" text-anchor="middle" class="m">/api/features · /approvals · /events · /traceability · /workspace</text>
+
+  <rect x="730" y="102" width="230" height="62" class="box human"/>
+  <text x="845" y="124" text-anchor="middle" class="t h">Three approval checkpoints</text>
+  <text x="845" y="142" text-anchor="middle" class="m">① design   ② each AI correction</text>
+  <text x="845" y="156" text-anchor="middle" class="m">③ release decision</text>
+
+  <rect x="990" y="102" width="370" height="62" class="box infra"/>
+  <text x="1175" y="124" text-anchor="middle" class="t h">Observability (FR-18)</text>
+  <text x="1175" y="142" text-anchor="middle" class="m">event log of agent calls · tool calls · gate evaluations ·</text>
+  <text x="1175" y="156" text-anchor="middle" class="m">human decisions · AI modifications · policy (+ OpenTelemetry)</text>
+
+  <!-- ===== Orchestrator ===== -->
+  <rect x="20" y="202" width="1360" height="118" class="lane"/>
+  <text x="34" y="222" class="lanet">ORCHESTRATION — custom Python state machine, 19 stages, state persisted after every step, resumable at any pause</text>
+  <rect x="40" y="234" width="1320" height="72" class="box infra"/>
+  <text x="700" y="257" text-anchor="middle" class="t h">Workflow Engine</text>
+  <text x="700" y="277" text-anchor="middle" class="m">receive → analyze → requirement gate → design → [human] → code → tests → execute → static analysis → security scan → AI review → evaluate gates</text>
+  <text x="700" y="293" text-anchor="middle" class="m">→ ( remediate → [human] → revalidate → compare before / after )* → traceability → release assessment + deterministic policy → [human] → completed</text>
+
+  <!-- ===== Agents ===== -->
+  <rect x="20" y="340" width="700" height="268" class="lane"/>
+  <text x="34" y="360" class="lanet">AI GENERATES — 8 specialised agents, schema-enforced JSON</text>
+  <text x="34" y="376" class="s">LLM client: Anthropic (forced tool-use) · any OpenAI-compatible endpoint (JSON mode) · stub (offline, deterministic)</text>
+  <g>
+    <rect x="40" y="388" width="160" height="50" class="box agent"/><text x="120" y="407" text-anchor="middle" class="t">1 · Business Analyst</text><text x="120" y="424" text-anchor="middle" class="s">reqs · stories · AC · ambiguities</text>
+    <rect x="210" y="388" width="160" height="50" class="box agent"/><text x="290" y="407" text-anchor="middle" class="t">2 · Solution Design</text><text x="290" y="424" text-anchor="middle" class="s">components · API · data model</text>
+    <rect x="380" y="388" width="160" height="50" class="box agent"/><text x="460" y="407" text-anchor="middle" class="t">3 · Developer</text><text x="460" y="424" text-anchor="middle" class="s">FastAPI code bundle + file plan</text>
+    <rect x="550" y="388" width="160" height="50" class="box agent"/><text x="630" y="407" text-anchor="middle" class="t">4 · Test Engineer</text><text x="630" y="424" text-anchor="middle" class="s">pytest suite mapped to AC</text>
+    <rect x="40" y="450" width="160" height="50" class="box agent"/><text x="120" y="469" text-anchor="middle" class="t">5 · Code Reviewer</text><text x="120" y="486" text-anchor="middle" class="s">severity · evidence · fix</text>
+    <rect x="210" y="450" width="160" height="50" class="box agent"/><text x="290" y="469" text-anchor="middle" class="t">6 · Security Review</text><text x="290" y="486" text-anchor="middle" class="s">authn · authz · secrets · injection</text>
+    <rect x="380" y="450" width="160" height="50" class="box agent"/><text x="460" y="469" text-anchor="middle" class="t">7 · Defect Resolution</text><text x="460" y="486" text-anchor="middle" class="s">probable cause → correction</text>
+    <rect x="550" y="450" width="160" height="50" class="box agent"/><text x="630" y="469" text-anchor="middle" class="t">8 · Release Assurance</text><text x="630" y="486" text-anchor="middle" class="s">READY / CONDITIONAL / …</text>
+  </g>
+  <rect x="40" y="516" width="670" height="76" class="box infra"/>
+  <text x="375" y="538" text-anchor="middle" class="t h">Typed artifacts (Pydantic schemas = the contract between agents)</text>
+  <text x="375" y="557" text-anchor="middle" class="m">RequirementAnalysis · TechnicalDesign · CodeBundle · TestBundle · ReviewReport · SecurityReport</text>
+  <text x="375" y="573" text-anchor="middle" class="m">RemediationProposal · ReleaseAssessment · Finding · GateResult · TraceabilityMatrix · ModificationRecord</text>
+
+  <!-- ===== Tools ===== -->
+  <rect x="740" y="340" width="640" height="268" class="lane"/>
+  <text x="754" y="360" class="lanet">ENGINEERING TOOLS VALIDATE — deterministic</text>
+  <text x="754" y="376" class="s">every tool runs as a subprocess inside the feature's isolated workspace with a scrubbed environment</text>
+  <g>
+    <rect x="760" y="388" width="145" height="50" class="box tool"/><text x="832" y="407" text-anchor="middle" class="t">Build check</text><text x="832" y="424" text-anchor="middle" class="s">compileall · import</text>
+    <rect x="915" y="388" width="145" height="50" class="box tool"/><text x="987" y="407" text-anchor="middle" class="t">pytest</text><text x="987" y="424" text-anchor="middle" class="s">junit → test ↔ AC mapping</text>
+    <rect x="1070" y="388" width="145" height="50" class="box tool"/><text x="1142" y="407" text-anchor="middle" class="t">Ruff + AST analysis</text><text x="1142" y="424" text-anchor="middle" class="s">lint · complexity · dead code</text>
+    <rect x="1225" y="388" width="135" height="50" class="box tool"/><text x="1292" y="407" text-anchor="middle" class="t">Bandit</text><text x="1292" y="424" text-anchor="middle" class="s">security SAST</text>
+    <rect x="760" y="450" width="145" height="50" class="box tool"/><text x="832" y="469" text-anchor="middle" class="t">Secret scanner</text><text x="832" y="486" text-anchor="middle" class="s">exposed credentials</text>
+    <rect x="915" y="450" width="145" height="50" class="box tool"/><text x="987" y="469" text-anchor="middle" class="t">pip-audit (optional)</text><text x="987" y="486" text-anchor="middle" class="s">dependency vulnerabilities</text>
+    <rect x="1070" y="450" width="290" height="50" class="box tool"/><text x="1215" y="469" text-anchor="middle" class="t">Isolated workspace  workspaces/&lt;feature-id&gt;/</text><text x="1215" y="486" text-anchor="middle" class="s">guarded writes · snapshots · diff per AI change</text>
+  </g>
+  <rect x="760" y="516" width="600" height="76" class="box gate"/>
+  <text x="1060" y="538" text-anchor="middle" class="t h">Quality gates (config/gates.yaml) + deterministic release policy</text>
+  <text x="1060" y="557" text-anchor="middle" class="m">requirement · code · test · security · traceability · release — each gate is a list of evidence checks</text>
+  <text x="1060" y="573" text-anchor="middle" class="m">HIGH/CRITICAL findings or a failed mandatory gate block readiness; the policy only overrules the agent downwards</text>
+
+  <!-- ===== Persistence ===== -->
+  <rect x="20" y="628" width="1360" height="96" class="lane"/>
+  <text x="34" y="648" class="lanet">STATE &amp; EVIDENCE</text>
+  <rect x="40" y="662" width="440" height="50" class="box infra"/><text x="260" y="682" text-anchor="middle" class="t h">SQLite  ·  features.state_json + events</text><text x="260" y="699" text-anchor="middle" class="s">WorkflowState per feature: artifacts, tool runs, findings, gates, approvals, diffs</text>
+  <rect x="500" y="662" width="400" height="50" class="box infra"/><text x="700" y="682" text-anchor="middle" class="t h">Traceability matrix (FR-14)</text><text x="700" y="699" text-anchor="middle" class="s">requirement → story → AC → component → file → test → result</text>
+  <rect x="920" y="662" width="440" height="50" class="box infra"/><text x="1140" y="682" text-anchor="middle" class="t h">Docker image · docker-compose · GitHub Actions CI</text><text x="1140" y="699" text-anchor="middle" class="s">ruff + bandit + pytest self-tests + end-to-end CLI run</text>
+
+  <!-- flows -->
+  <path d="M155 164 L155 200" class="flow"/>
+  <path d="M500 164 L500 200" class="flow"/>
+  <path d="M845 164 L845 200" class="flow"/>
+  <path d="M1175 202 L1175 164" class="flow"/>
+  <path d="M375 306 L375 388" class="flow"/>
+  <path d="M1060 306 L1060 388" class="flow"/>
+  <path d="M720 554 L750 554" class="flow"/>
+  <path d="M260 592 L260 662" class="flow"/>
+  <path d="M1060 592 L1060 628" class="flow"/>
+  <path d="M700 592 L700 662" class="flow"/>
+
+  <text x="700" y="780" text-anchor="middle" class="m">Mandatory principle: Requirement → GenAI analysis → design → code generation → deterministic validation → testing → security controls → AI review → correction → revalidation → human approval → release recommendation.</text>
+  <text x="700" y="800" text-anchor="middle" class="m">Generated code is never classified as production-ready automatically; every AI modification is recorded with its diff, the approving human and the before/after validation comparison.</text>
+</svg>

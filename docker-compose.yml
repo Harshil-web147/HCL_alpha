@@ -1,0 +1,43 @@
+services:
+  copilot:
+    build: .
+    image: sdlc-copilot:latest
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # Override in .env - "stub" runs fully offline with the reference feature.
+      LLM_PROVIDER: ${LLM_PROVIDER:-stub}
+    volumes:
+      - copilot-data:/data
+      - copilot-workspaces:/workspaces
+    restart: unless-stopped
+
+  # One-shot CLI demo of the whole workflow (auto-approves every human checkpoint):
+  #   docker compose run --rm demo
+  demo:
+    build: .
+    image: sdlc-copilot:latest
+    env_file:
+      - .env
+    environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-stub}
+    volumes:
+      - copilot-data:/data
+      - copilot-workspaces:/workspaces
+    command: ["python", "-m", "app.cli", "run", "--example", "--auto-approve"]
+    profiles: ["demo"]
+
+  # Platform self-tests:  docker compose run --rm tests
+  tests:
+    build: .
+    image: sdlc-copilot:latest
+    environment:
+      LLM_PROVIDER: stub
+    command: ["python", "-m", "pytest", "-q"]
+    profiles: ["test"]
+
+volumes:
+  copilot-data:
+  copilot-workspaces:

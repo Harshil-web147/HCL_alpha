@@ -1,0 +1,63 @@
+# Configurable SDLC quality gates (FR-15).
+# Every gate lists the deterministic checks that must hold. "mandatory: true"
+# gates block progression / release readiness when they fail.
+
+gates:
+  requirement:
+    mandatory: true
+    checks:
+      - acceptance_criteria_defined        # every user story has >= 1 measurable AC
+      - ambiguities_identified             # ambiguity detection ran and produced a (possibly empty) list
+      - mandatory_nfrs_considered          # at least the NFR categories below are covered
+    required_nfr_keywords: [security, audit, performance, logging]
+
+  code:
+    mandatory: true
+    checks:
+      - build_succeeds                     # compileall + import of the application module
+      - static_analysis_completed          # ruff ran to completion
+      - no_critical_violations             # no ruff codes from the critical list below
+    critical_ruff_prefixes: ["E9", "F63", "F7", "F82"]   # syntax errors, undefined names, invalid syntax
+
+  test:
+    mandatory: true
+    checks:
+      - mandatory_tests_executed           # pytest ran and produced results
+      - required_tests_pass                # 0 failed / errored tests
+      - acceptance_criteria_have_tests     # every AC is mapped to >= 1 test
+    minimum_tests: 5
+
+  security:
+    mandatory: true
+    checks:
+      - no_blocking_security_findings      # no open CRITICAL/HIGH findings from any security source
+      - no_exposed_credentials             # secret scanner found nothing
+      - required_security_checks_completed # all required_scanners ran (status != error)
+    blocking_severities: [CRITICAL, HIGH]
+    required_scanners: [bandit, secrets]
+
+  traceability:
+    mandatory: true
+    checks:
+      - requirements_mapped_to_code        # every functional requirement maps to >= 1 generated file
+      - acceptance_criteria_mapped_to_tests
+      - tests_have_execution_results
+    minimum_requirement_coverage: 100
+    minimum_acceptance_criteria_coverage: 100
+
+  release:
+    mandatory: true
+    checks:
+      - mandatory_gates_passed
+      - no_unresolved_blocking_defects      # no open CRITICAL/HIGH findings from any source
+      - required_human_approvals_recorded   # design approval (+ remediation approvals when used)
+
+remediation:
+  max_iterations: 3            # how many AI correction loops before escalating to MANUAL_REVIEW
+  require_human_approval: true # FR-17: AI-generated modifications need developer approval before being applied
+  rerun_ai_review: true        # re-run the Code Reviewer / Security agents after a change (deterministic tools always re-run)
+
+release_policy:
+  # The Release Assurance agent proposes; this deterministic policy has the final say.
+  block_on_failed_mandatory_gates: true
+  conditional_allowed_when_open_medium_findings: true

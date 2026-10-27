@@ -1,0 +1,21 @@
+[project]
+name = "sdlc-copilot"
+version = "0.1.0"
+description = "AI-Powered SDLC Engineering Copilot - multi-agent architecture with deterministic quality gates"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+    "e2e: end-to-end workflow tests (slow)",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+exclude = ["data", "workspaces", ".venv", "app/llm/stub_assets"]  # stub_assets = reference generated app with one planted issue
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501", "UP042"]
