@@ -103,8 +103,8 @@ class Workspace:
         shutil.rmtree(self.path, ignore_errors=True)
 
     # ---------------------------------------------------------------- execute
-    def run(self, args: list[str], timeout: int = 180, env: dict[str, str] | None = None) -> CommandResult:
-        """Run a command inside the workspace with a minimal environment."""
+    def env(self, extra: dict[str, str] | None = None) -> dict[str, str]:
+        """The minimal environment every workspace process runs with."""
         base_env = {
             "PATH": os.environ.get("PATH", ""),
             "HOME": str(self.path / ".sdlc"),
@@ -117,8 +117,13 @@ class Workspace:
         for key in ("VIRTUAL_ENV", "PYTHONHOME", "HTTPS_PROXY", "HTTP_PROXY", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE"):
             if key in os.environ:
                 base_env[key] = os.environ[key]
-        if env:
-            base_env.update(env)
+        if extra:
+            base_env.update(extra)
+        return base_env
+
+    def run(self, args: list[str], timeout: int = 180, env: dict[str, str] | None = None) -> CommandResult:
+        """Run a command inside the workspace with a minimal environment."""
+        base_env = self.env(env)
         started = time.perf_counter()
         try:
             proc = subprocess.run(  # nosec B603

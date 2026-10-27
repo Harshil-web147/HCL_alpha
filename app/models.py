@@ -154,6 +154,14 @@ class CodeBundle(BaseModel):
     files: list[GeneratedFile]
     run_instructions: str = ""
     notes: str = ""
+    demo_env: dict[str, str] = Field(
+        default_factory=dict,
+        description="Environment variables (with safe, made-up demo values) needed to start the app locally for a reviewer",
+    )
+    demo_tokens: dict[str, str] = Field(
+        default_factory=dict,
+        description="Bearer tokens a reviewer can paste into /docs 'Authorize' (label -> token); must be valid under demo_env",
+    )
 
 
 class TestCase(BaseModel):
@@ -411,6 +419,9 @@ class WorkflowState(BaseModel):
     snapshots: list[ValidationSnapshot] = Field(default_factory=list)
     remediation_history: list[str] = Field(default_factory=list)
     human_feedback: list[str] = Field(default_factory=list, description="Comments from rejected approvals, fed back to agents")
+    remediation_guidance: list[str] = Field(
+        default_factory=list, description="Developer answers given when the defect resolver could not fix safely on its own"
+    )
 
     # ------------------------------------------------------------------ helpers
     def latest_tool_runs(self) -> dict[str, ToolRun]:

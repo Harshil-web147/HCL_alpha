@@ -25,7 +25,9 @@ Rules:
 - Never introduce new secrets, eval/exec, shell execution or disabled security checks.
 - List the finding ids you address in addressed_finding_ids.
 - If you cannot propose a safe fix with confidence, return an empty `changes` list with
-  confidence="low" so the change is escalated to a developer instead of guessing.
+  confidence="low" so the change is escalated to a developer instead of guessing. In that case
+  `probable_cause` must end with the concrete question(s) the developer has to answer
+  (e.g. "Which storage should be used: SQLite, PostgreSQL or keep in-memory?").
 The correction will be applied only after human approval and will be re-validated by every tool.
 """
 
@@ -43,6 +45,8 @@ The correction will be applied only after human approval and will be re-validate
             + dumps([f.model_dump() for f in failures])
             + "\n\nPREVIOUS REMEDIATION ATTEMPTS\n"
             + ("\n".join(f"- {h}" for h in state.remediation_history) or "(none)")
+            + "\n\nDEVELOPER GUIDANCE (answers to your earlier escalations - these decisions are made, follow them)\n"
+            + ("\n".join(f"- {g}" for g in state.remediation_guidance) or "(none)")
             + "\n\nCURRENT WORKSPACE CODE\n"
             + code_block(state)
             + "\n\nProduce the RemediationProposal artifact."

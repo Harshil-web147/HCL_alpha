@@ -19,6 +19,7 @@ from app.config import get_settings
 from app.models import ApprovalRequest, FeatureRequest, WorkflowState
 from app.orchestration.engine import WorkflowEngine
 from app.persistence import Store
+from app.tools.product import build_handoff
 
 EXAMPLE = FeatureRequest(
     title="Customer contact update API",
@@ -59,6 +60,15 @@ def run_feature(engine: WorkflowEngine, request: FeatureRequest, auto_approve: b
         if state.is_terminal():
             break
         checkpoint = CHECKPOINT_FOR_STAGE[state.stage.value]
+        if checkpoint == "remediation" and state.remediation_proposal and not state.remediation_proposal.changes:
+            print(f"\n   AI could not fix this safely: {state.remediation_proposal.failure_summary}")
+            print(f"   it needs to know: {state.remediation_proposal.probable_cause}")
+            if auto_approve:
+                print("   [auto-approve] guidance cannot be invented - skipping")
+            guidance = "" if auto_approve else input("\n   your guidance (empty to skip): ").strip()
+            decision = "approve" if guidance else "reject"
+            state = engine.approve(state.feature_id, checkpoint, ApprovalRequest(decision=decision, approver=approver, comment=guidance))  # type: ignore[arg-type]
+            continue
         if checkpoint == "remediation" and state.remediation_proposal:
             print(f"\n   AI proposes changes to {state.remediation_proposal.affected_files}: {state.remediation_proposal.rationale}")
             for mod in state.modifications:
@@ -83,7 +93,24 @@ def run_feature(engine: WorkflowEngine, request: FeatureRequest, auto_approve: b
         t = state.traceability
         print(f"   traceability: requirements {t.requirement_coverage}%, AC {t.acceptance_criteria_coverage}%, tests with results {t.tests_with_results}%")
     print(f"   workspace: {engine.settings.workspace_root / state.feature_id}")
+    if state.stage.value == "completed":
+        _print_handoff(build_handoff(state, engine.settings, None))
     return state
+
+
+def _print_handoff(h: dict) -> None:
+    built = h["what_was_built"]
+    print("\n== your product")
+    print(f"   {built['summary']}\n   {built['kind']}")
+    for e in built["endpoints"]:
+        print(f"     {e['method']:<6} {e['path']:<40} {e['description']}")
+    print("   checked: " + "; ".join(h["what_was_verified"]))
+    print(f"   code:    {h['where_the_code_is']}")
+    print(f"   run it:  {h['run_it_yourself']}")
+    print("            then open http://localhost:8001/docs (or use the dashboard's \"Launch app\" button)")
+    print("   good to know:")
+    for item in h["limitations"]:
+        print(f"     - {item}")
 
 
 def main(argv: list[str] | None = None) -> int:

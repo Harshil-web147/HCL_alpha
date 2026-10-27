@@ -17,6 +17,7 @@ os.environ["LLM_PROVIDER"] = "stub"
 os.environ["SDLC_DATA_DIR"] = str(_TMP / "data")
 os.environ["SDLC_WORKSPACE_ROOT"] = str(_TMP / "workspaces")
 os.environ["SDLC_ENABLE_PIP_AUDIT"] = "false"
+os.environ["SDLC_AUTO_LAUNCH_PRODUCT"] = "false"
 os.environ.pop("OTEL_EXPORTER_OTLP_ENDPOINT", None)
 
 from app.config import get_settings, reset_settings  # noqa: E402

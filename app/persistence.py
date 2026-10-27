@@ -124,6 +124,18 @@ class Store:
             ).fetchall()
         return [{**dict(r), "payload": json.loads(r["payload"])} for r in rows]
 
+    def llm_usage(self, feature_id: str) -> dict[str, int]:
+        """Token totals over every LLM call recorded for a feature."""
+        totals = {"calls": 0, "input_tokens": 0, "cached_input_tokens": 0, "output_tokens": 0, "reasoning_tokens": 0}
+        with self._lock, self._connect() as conn:
+            rows = conn.execute("SELECT payload FROM events WHERE feature_id=? AND type='agent_call'", (feature_id,)).fetchall()
+        for row in rows:
+            usage = json.loads(row["payload"]).get("usage") or {}
+            totals["calls"] += 1
+            for key in ("input_tokens", "cached_input_tokens", "output_tokens", "reasoning_tokens"):
+                totals[key] += usage.get(key, 0)
+        return totals
+
     def event_counts(self) -> dict[str, int]:
         with self._lock, self._connect() as conn:
             rows = conn.execute("SELECT type, COUNT(*) AS n FROM events GROUP BY type").fetchall()

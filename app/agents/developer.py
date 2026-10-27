@@ -31,6 +31,12 @@ Rules:
   when the design says so), validation via Pydantic schemas, a uniform error envelope via exception
   handlers, structured logging that never logs personal data, configuration from environment variables.
 - Never hard-code secrets, never use eval/exec/shell commands, never use assert for control flow.
+- The platform starts the finished app so a reviewer can try it from /docs. Fill `demo_env` with
+  every environment variable the app needs to start locally, using safe made-up demo values in the
+  exact format the code parses (e.g. a JSON string). If endpoints need a bearer token, fill
+  `demo_tokens` (label -> token) with tokens that are valid under `demo_env`. Demo access lives only
+  in this configuration: never add demo-only code paths, flags or endpoints that issue or reveal
+  tokens, and never weaken real token verification.
 - Add a module docstring to each file stating "Implements: <requirement/AC ids>" and fill the
   `implements` list of each file with the same ids - this drives traceability.
 - Code must pass `ruff check` and be importable with `python -c "import app.main"` without any

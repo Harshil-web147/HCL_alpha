@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -72,3 +73,31 @@ def test_feature_lifecycle_through_the_api(client):
     assert client.get("/api/features/does-not-exist").status_code == 404
     assert client.delete(f"/api/features/{fid}").status_code == 204
     assert client.get("/api/features").json() == []
+
+
+def test_finished_workflow_hands_over_a_running_product(client):
+    fid = client.post("/api/features?wait=true", json=PAYLOAD).json()["feature_id"]
+    assert client.get(f"/api/features/{fid}/product").json()["status"] == "not_ready"
+    assert client.post(f"/api/features/{fid}/product/launch").status_code == 409
+
+    client.post(f"/api/features/{fid}/approvals/design?wait=true", json={"decision": "approve"})
+    client.post(f"/api/features/{fid}/approvals/remediation?wait=true", json={"decision": "approve"})
+    ready = client.get(f"/api/features/{fid}/product").json()
+    assert ready["status"] == "ready" and ready["url"] is None
+    assert any("LLM_PROVIDER=stub" in item for item in ready["limitations"])
+    assert ("PUT", "/customers/{customer_id}/contact") in {(e["method"], e["path"]) for e in ready["what_was_built"]["endpoints"]}
+
+    try:
+        running = client.post(f"/api/features/{fid}/product/launch").json()
+        assert running["status"] == "running" and running["docs_url"].endswith("/docs")
+        token = running["demo_tokens"]["cust-1001"]
+        base = running["url"].replace("localhost", "127.0.0.1")
+        assert httpx.get(f"{base}/health").json()["status"] == "ok"
+        own = httpx.get(f"{base}/customers/cust-1001/contact", headers={"Authorization": f"Bearer {token}"})
+        assert own.status_code == 200 and own.json()["customer_id"] == "cust-1001"
+        other = httpx.get(f"{base}/customers/cust-1002/contact", headers={"Authorization": f"Bearer {token}"})
+        assert other.status_code == 403
+        assert client.post(f"/api/features/{fid}/product/launch").json()["url"] == running["url"]  # idempotent
+    finally:
+        stopped = client.post(f"/api/features/{fid}/product/stop").json()
+    assert stopped["status"] == "ready"

@@ -108,7 +108,8 @@ class WorkflowEngine:
 
     def _context(self, state: WorkflowState) -> _Context:
         events = EventLog(self.store, state.feature_id, self.tracer)
-        llm = LLMClient(self.settings, provider=self.provider, observer=events.llm_observer)
+        used = self.store.llm_usage(state.feature_id)
+        llm = LLMClient(self.settings, provider=self.provider, observer=events.llm_observer, tokens_used=used["input_tokens"] + used["output_tokens"])
         return _Context(
             events=events,
             llm=llm,
@@ -181,6 +182,18 @@ class WorkflowEngine:
                     self._transition(state, ctx, Stage.DESIGNING, note="design rejected with feedback - redesigning")
                 else:
                     self._transition(state, ctx, Stage.REJECTED, note="design rejected")
+            elif checkpoint == "remediation" and state.remediation_proposal and not state.remediation_proposal.changes:
+                # the agent asked for guidance: approve + comment = retry with it, reject = escalate
+                if request.decision == "approve":
+                    if not request.comment.strip():
+                        raise WorkflowError("the AI needs guidance to retry - describe what it should do in the comment, or reject to skip")
+                    state.remediation_guidance.append(request.comment.strip())
+                    state.remediation_proposal = None
+                    self._transition(state, ctx, Stage.REMEDIATING, note="developer guidance provided - retrying the fix")
+                else:
+                    state.remediation_history.append(f"iteration {state.iteration}: no fix and no guidance - escalated by {request.approver}")
+                    state.remediation_proposal = None
+                    self._transition(state, ctx, Stage.TRACEABILITY_CHECK, note="no fix - escalating to release assessment")
             elif checkpoint == "remediation":
                 if request.decision == "approve":
                     self._apply_proposal(state, ctx, approved_by=request.approver)
@@ -269,6 +282,10 @@ class WorkflowEngine:
         state.remediation_proposal = proposal
         if not proposal.changes:
             state.remediation_history.append(f"iteration {state.iteration}: no safe automated fix ({proposal.confidence} confidence) - {proposal.probable_cause}")
+            if self.gates.cfg.require_remediation_approval:
+                # ask the developer instead of guessing: their answer is fed back for another attempt
+                ctx.events.emit(EVENT_POLICY, "defect_resolver", "no automated correction proposed - waiting for developer guidance")
+                return Stage.AWAITING_REMEDIATION_APPROVAL
             ctx.events.emit(EVENT_POLICY, "defect_resolver", "no automated correction proposed - escalating to manual review")
             return Stage.TRACEABILITY_CHECK
         # Record every proposed modification with its diff BEFORE anything is applied (FR-17/FR-18).

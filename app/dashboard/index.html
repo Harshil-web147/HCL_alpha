@@ -40,6 +40,11 @@
   details summary{cursor:pointer;color:var(--accent);font-weight:600}
   .trace td ul{margin:0;padding-left:16px}
   .hidden{display:none}
+  .product{border:2px solid #bbf7d0;background:#f0fdf4;border-radius:10px;padding:16px;margin-bottom:14px}
+  .product.ready{border-color:#ddd6fe;background:#faf5ff}
+  .product h3{margin:0 0 6px;font-size:16px} .product h4{margin:12px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+  .product ul{margin:0;padding-left:18px} .product .link{font-size:15px;font-weight:600}
+  .product code.token{display:block;word-break:break-all;white-space:normal;background:#fff;border:1px solid var(--line);border-radius:6px;padding:4px 6px;margin:2px 0}
   @media (max-width:800px){main{padding:12px}.files{flex-direction:column}}
 </style>
 </head>
@@ -86,7 +91,9 @@
       <span class="muted small mono" id="ft-id"></span>
     </div>
     <div class="pipeline" id="pipeline"></div>
+    <div id="product-top"></div>
     <div id="approval"></div>
+    <div id="product-bottom"></div>
     <div class="tabs" id="tabs"></div>
     <div id="tab-body"></div>
   </section>
@@ -95,7 +102,7 @@
 <script>
 const STAGES = ["received","analyzing_requirement","requirement_gate","designing","awaiting_design_approval","generating_code","generating_tests","executing_tests","static_analysis","security_validation","ai_code_review","evaluating_gates","remediating","awaiting_remediation_approval","revalidating","traceability_check","release_assessment","awaiting_release_approval","completed"];
 const TABS = ["Overview","Requirements","Design","Code","Tests","Findings","Gates","Traceability","Modifications","Events"];
-let current = null, currentTab = "Overview", timer = null, selectedFile = null, events = [];
+let current = null, currentTab = "Overview", timer = null, selectedFile = null, events = [], productPolls = 0;
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -132,7 +139,7 @@ async function loadExec(){
 function stagePill(st){ const cls = st.startsWith("awaiting") ? "awaiting" : st; return `<span class="pill stage ${cls}">${esc(st.replaceAll("_"," "))}</span>`; }
 
 // ------------------------------------------------------------------ feature
-async function openFeature(id){ clearInterval(timer); current = id; selectedFile = null; showViewFeature(); await refreshFeature(); timer = setInterval(refreshFeature, 3000); }
+async function openFeature(id){ clearInterval(timer); current = id; selectedFile = null; productPolls = 0; showViewFeature(); await refreshFeature(); timer = setInterval(refreshFeature, 3000); }
 function showViewFeature(){ $("#view-exec").classList.add("hidden"); $("#view-feature").classList.remove("hidden"); }
 async function refreshFeature(){
   if (!current) return;
@@ -142,7 +149,37 @@ async function refreshFeature(){
   $("#ft-stage").outerHTML = stagePill(f.stage).replace('class="pill', 'id="ft-stage" class="pill');
   $("#ft-decision").outerHTML = f.release_assessment ? pill(f.release_assessment.decision).replace('class="pill', 'id="ft-decision" class="pill') : '<span id="ft-decision"></span>';
   renderPipeline(f); renderApproval(f); renderTabs(f);
-  if (f.terminal) clearInterval(timer);
+  const p = ["awaiting_release_approval","completed"].includes(f.stage) ? await api(`/api/features/${current}/product`) : null;
+  renderProduct(f, p);
+  // after completion the app is started in the background - keep polling briefly until its link appears
+  if (f.terminal && (!p || p.status === "running" || ++productPolls > 10)) clearInterval(timer);
+}
+function renderProduct(f, p){
+  $("#product-top").innerHTML = ""; $("#product-bottom").innerHTML = "";
+  if (!p) return;
+  const b = p.what_was_built, list = (a) => `<ul>${a.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`;
+  const html = `<div class="product ${p.status === "running" ? "" : "ready"}">
+    <h3>${p.status === "running" ? "Your product is ready - open it and try it" : f.stage === "completed" ? "Your product - starting…" : "Try the product before you approve the release"}</h3>
+    <p>${esc(p.headline)}</p>
+    ${p.url ? `<p class="link"><a href="${esc(p.docs_url)}" target="_blank" rel="noopener">Open the app: ${esc(p.docs_url)} ↗</a></p>` : ""}
+    <div style="display:flex;gap:8px;margin:6px 0">
+      ${p.status === "running" ? `<button class="ghost" onclick="productAction('stop')">Stop app</button>` : `<button onclick="productAction('launch')">Launch app</button>`}
+      <span class="muted small" id="product-msg"></span></div>
+    <h4>What was built</h4><p class="small">${esc(b.summary)}<br><i>${esc(b.kind)}</i></p>
+    ${b.endpoints.length ? `<table>${b.endpoints.map(e=>`<tr><td class="mono">${esc(e.method)} ${esc(e.path)}</td><td class="small">${esc(e.description)}</td></tr>`).join("")}</table>` : ""}
+    <h4>How it was checked</h4>${list(p.what_was_verified)}
+    ${p.how_to_try.length ? `<h4>How to try it</h4>${list(p.how_to_try)}` : ""}
+    ${Object.keys(p.demo_tokens).length ? `<h4>Demo tokens (paste into "Authorize")</h4>${Object.entries(p.demo_tokens).map(([k,v])=>`<div class="small"><b>${esc(k)}</b><code class="token">${esc(v)}</code></div>`).join("")}` : ""}
+    <h4>Where the code is</h4><p class="small mono">${esc(p.where_the_code_is)}</p>
+    <details><summary>Run it yourself without the dashboard</summary><pre>${esc(p.run_it_yourself)}</pre></details>
+    <h4>Good to know (limitations)</h4>${list(p.limitations)}
+  </div>`;
+  $(f.stage === "completed" ? "#product-top" : "#product-bottom").innerHTML = html;
+}
+async function productAction(action){
+  const msg = $("#product-msg"); if (msg) msg.textContent = action === "launch" ? "starting the app…" : "stopping…";
+  try { renderProduct(window.F, await api(`/api/features/${current}/product/${action}`, {method:"POST"})); }
+  catch (e) { if ($("#product-msg")) $("#product-msg").textContent = e.message; }
 }
 function renderPipeline(f){
   const visited = new Set(f.transitions.map(t => t.from_stage)); visited.add(f.stage);
@@ -150,6 +187,10 @@ function renderPipeline(f){
 }
 function renderApproval(f){
   const box = $("#approval");
+  // the page polls every few seconds - only rebuild when the pause point changes, so typed text survives
+  const key = `${f.stage}:${f.iteration}:${f.approvals.length}`;
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
   if (!f.paused) { box.innerHTML = f.stage === "failed" ? `<div class="approval" style="border-color:#fca5a5;background:#fef2f2"><h3>Workflow failed</h3><div class="mono">${esc(f.error)}</div></div>` : ""; return; }
   let body = "";
   if (f.stage === "awaiting_design_approval") {
@@ -157,6 +198,18 @@ function renderApproval(f){
     body = `<h3>Human design approval required (step 7)</h3><p>${esc(d.overview)}</p>
       <p class="small"><b>Components:</b> ${d.components.map(c => esc(c.name)).join(" → ")}<br><b>API:</b> ${d.api.map(a => `<code>${a.method} ${esc(a.path)}</code>`).join(", ")}</p>
       <details><summary>${ra.ambiguities.length} ambiguities & ${ra.assumptions.filter(a=>a.needs_confirmation).length} assumptions need your confirmation</summary><ul class="small">${ra.ambiguities.map(a=>`<li><b>${a.id}</b> ${esc(a.clarification_question)} <i>default: ${esc(a.proposed_default)}</i></li>`).join("")}${ra.assumptions.filter(a=>a.needs_confirmation).map(a=>`<li><b>${a.id}</b> ${esc(a.description)}</li>`).join("")}</ul></details>`;
+  } else if (f.stage === "awaiting_remediation_approval" && !f.remediation_proposal.changes.length) {
+    const p = f.remediation_proposal, blocking = f.findings.filter(x => x.status === "open" && ["CRITICAL","HIGH"].includes(x.severity));
+    box.innerHTML = `<div class="approval"><h3>The AI could not fix this safely on its own and needs your guidance (iteration ${f.iteration})</h3>
+      <p><b>What is failing:</b> ${esc(p.failure_summary)}</p>
+      <p><b>Why it stopped / what it needs to know:</b> ${esc(p.probable_cause)}</p>
+      ${blocking.length ? `<details><summary>${blocking.length} blocking finding(s)</summary><ul class="small">${blocking.map(x=>`<li>${pill(x.severity)} <code>${esc(x.id)}</code> ${esc(x.finding)} <span class="muted">${esc(x.file)}</span></li>`).join("")}</ul></details>` : ""}
+      ${f.remediation_guidance.length ? `<p class="small muted"><b>Guidance you already gave:</b> ${f.remediation_guidance.map(esc).join(" · ")}</p>` : ""}
+      <div style="margin-top:10px"><input id="approver" placeholder="your name" value="developer" style="max-width:220px"></div>
+      <textarea id="comment" style="margin-top:8px" placeholder="Answer the AI, e.g. &quot;Use SQLite via the standard sqlite3 module&quot; or &quot;Log outcomes as JSON lines to stdout&quot;"></textarea>
+      <div style="margin-top:10px;display:flex;gap:8px"><button onclick="decide('remediation','approve')">Retry the fix with my guidance</button>
+      <button class="ghost" onclick="decide('remediation','reject')">Skip - continue to release assessment</button></div></div>`;
+    return;
   } else if (f.stage === "awaiting_remediation_approval") {
     const p = f.remediation_proposal, mods = f.modifications.filter(m => m.iteration === f.iteration);
     body = `<h3>AI-generated correction awaits developer approval (FR-17) - iteration ${f.iteration}</h3>
@@ -176,7 +229,7 @@ function renderApproval(f){
     <div style="margin-top:10px;display:flex;gap:8px"><button onclick="decide('${cp}','approve')">Approve</button><button class="danger" onclick="decide('${cp}','reject')">Reject</button></div></div>`;
 }
 async function decide(cp, decision){
-  try { await api(`/api/features/${current}/approvals/${cp}`, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({decision, approver: $("#approver").value || "developer", comment: $("#comment").value})}); await refreshFeature(); timer = setInterval(refreshFeature, 3000); }
+  try { await api(`/api/features/${current}/approvals/${cp}`, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({decision, approver: $("#approver").value || "developer", comment: $("#comment").value})}); productPolls = 0; clearInterval(timer); await refreshFeature(); timer = setInterval(refreshFeature, 3000); }
   catch (e) { alert(e.message); }
 }
 function diffHtml(d){ return `<pre class="diff">${d.split("\n").map(l => l.startsWith("+") ? `<span class="add">${esc(l)}</span>` : l.startsWith("-") ? `<span class="del">${esc(l)}</span>` : esc(l)).join("\n")}</pre>`; }
@@ -195,8 +248,20 @@ function tabOverview(f){
     ${card("Quality gates", `<table>${Object.values(gates).map(g => `<tr><td>${g.gate}${g.mandatory?' <span class="muted small">(mandatory)</span>':''}</td><td>${pill(g.passed?'passed':'failed')}</td><td class="small muted">${g.checks.filter(c=>!c.passed).map(c=>esc(c.name)).join(", ")||"all checks ok"}</td></tr>`).join("") || `<tr><td class="muted">none yet</td></tr>`}</table>`)}</div>
     <div class="row">${card("Engineering tool runs", `<table><thead><tr><th>Tool</th><th>Status</th><th>Summary</th><th>Time</th></tr></thead>${runs.map(r=>`<tr><td class="mono">${r.tool}</td><td>${pill(r.status)}</td><td>${esc(r.summary)}</td><td class="small muted">${r.duration_seconds}s</td></tr>`).join("")}</table>`)}
     ${card("Remediation & comparison", f.remediation_history.length ? `<ul class="small">${f.remediation_history.map(h=>`<li>${esc(h)}</li>`).join("")}</ul>` : '<span class="muted">no remediation needed so far</span>')}</div>
+    ${usageCard(f.llm_usage)}
     ${f.release_assessment ? card("Release assessment", `${pill(f.release_assessment.decision)} ${esc(f.release_assessment.rationale)}${f.release_assessment.policy_override?`<p class="small" style="color:var(--bad)">${esc(f.release_assessment.policy_override)}</p>`:""}`) : ""}
     ${card("Human decisions", f.approvals.length ? `<table>${f.approvals.map(a=>`<tr><td>${a.checkpoint}</td><td>${pill(a.decision==='approve'?'passed':'failed', a.decision==='approve'?'passed':'failed')} ${esc(a.decision)}</td><td>${esc(a.approver)}</td><td class="small muted">${esc(a.comment)}</td><td class="small muted">${fmt(a.recorded_at)}</td></tr>`).join("")}</table>` : '<span class="muted">none yet</span>')}`;
+}
+function usageCard(u){
+  if (!u || !u.calls) return "";
+  const n = (x) => Number(x).toLocaleString(), total = u.input_tokens + u.output_tokens;
+  const cachePct = u.input_tokens ? Math.round(100 * u.cached_input_tokens / u.input_tokens) : 0;
+  return card(`LLM usage & cost · ${esc(u.model)}`, `<div class="tiles">
+    <div class="tile"><div class="n">${u.cost_usd == null ? "–" : "$" + u.cost_usd.toFixed(4)}</div><div class="l">${u.cost_usd == null ? "set LLM_PRICE_* in .env for a cost estimate" : "estimated cost"}</div></div>
+    <div class="tile"><div class="n">${n(total)}</div><div class="l">tokens${u.budget ? ` of ${n(u.budget)} budget (${Math.round(100*total/u.budget)}%)` : ""}</div></div>
+    <div class="tile"><div class="n">${n(u.input_tokens)}</div><div class="l">input · ${cachePct}% served from cache</div></div>
+    <div class="tile"><div class="n">${n(u.output_tokens)}</div><div class="l">output · ${n(u.reasoning_tokens)} reasoning</div></div>
+    <div class="tile"><div class="n">${u.calls}</div><div class="l">LLM calls · effort ${esc(u.effort_code)} for code/tests, ${esc(u.effort_default)} otherwise</div></div></div>`);
 }
 function latestRuns(f){ const m = {}; f.tool_runs.forEach(r => m[r.tool] = r); return m; }
 function latestGates(f){ const m = {}; f.gate_results.forEach(g => m[g.gate] = g); return m; }

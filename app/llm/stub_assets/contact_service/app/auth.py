@@ -43,3 +43,8 @@ def get_current_customer(request: Request) -> str:
     if not header.startswith("Bearer "):
         raise ApiError(401, "UNAUTHENTICATED", "Missing bearer token")
     return verify_token(header[len("Bearer ") :].strip())
+
+
+def demo_tokens() -> dict[str, str]:
+    """Ready-to-use bearer tokens for the seeded demo customers (for trying the running API)."""
+    return {customer_id: issue_token(customer_id) for customer_id in ("cust-1001", "cust-1002")}

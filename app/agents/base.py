@@ -32,9 +32,10 @@ General rules for every agent in this SDLC copilot:
 
 
 def dumps(obj: Any) -> str:
+    # compact JSON: same content as indented output for ~25% fewer input tokens
     if isinstance(obj, BaseModel):
-        return obj.model_dump_json(indent=2)
-    return json.dumps(obj, indent=2, default=str)
+        return obj.model_dump_json()
+    return json.dumps(obj, separators=(",", ":"), default=str)
 
 
 class Agent(Generic[T]):

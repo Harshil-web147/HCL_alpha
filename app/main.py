@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +16,7 @@ from app.config import get_settings
 from app.models import ApprovalRequest, FeatureRequest, Stage, WorkflowState
 from app.orchestration.engine import WorkflowEngine, WorkflowError
 from app.persistence import Store
+from app.tools.product import LaunchError, ProductLauncher, build_handoff
 
 DASHBOARD_HTML = Path(__file__).parent / "dashboard" / "index.html"
 
@@ -26,13 +29,22 @@ def create_app(engine: WorkflowEngine | None = None) -> FastAPI:
     settings = get_settings()
     eng = engine or WorkflowEngine(Store(settings.db_path), settings)
     store = eng.store
+    launcher = ProductLauncher(settings)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        yield
+        launcher.stop_all()
+
     app = FastAPI(
+        lifespan=lifespan,
         title="AI-Powered SDLC Engineering Copilot",
         version="0.1.0",
         description="Requirement -> GenAI analysis -> design -> code -> deterministic validation -> testing -> security -> AI review -> correction -> revalidation -> human approval -> release recommendation.",
     )
     app.state.engine = eng
     app.state.store = store
+    app.state.launcher = launcher
 
     def _start_run(feature_id: str) -> None:
         threading.Thread(target=eng.run, args=(feature_id,), name=f"run-{feature_id}", daemon=True).start()
@@ -82,12 +94,41 @@ def create_app(engine: WorkflowEngine | None = None) -> FastAPI:
             state = eng.approve(feature_id, checkpoint, payload)
         except WorkflowError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+        if state.stage == Stage.COMPLETED and settings.auto_launch_product:
+            threading.Thread(target=_launch_quietly, args=(state,), name=f"launch-{feature_id}", daemon=True).start()
         if not state.is_terminal() and not state.is_paused():
             if wait:
                 state = eng.run(feature_id)
             else:
                 _start_run(feature_id)
         return {"feature_id": feature_id, "stage": state.stage.value, "approvals": [a.model_dump() for a in state.approvals]}
+
+    # ---------------------------------------------------------------- product
+    def _launch_quietly(state: WorkflowState) -> None:
+        try:
+            launcher.launch(state)
+        except LaunchError as exc:
+            store.add_event(state.feature_id, "error", "product_launcher", f"auto-launch failed: {exc}"[:500])
+
+    @app.get("/api/features/{feature_id}/product")
+    def get_product(feature_id: str) -> dict[str, Any]:
+        state = _load(feature_id)
+        return build_handoff(state, settings, launcher.status(feature_id))
+
+    @app.post("/api/features/{feature_id}/product/launch")
+    def launch_product(feature_id: str) -> dict[str, Any]:
+        state = _load(feature_id)
+        try:
+            product = launcher.launch(state)
+        except LaunchError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return build_handoff(state, settings, product)
+
+    @app.post("/api/features/{feature_id}/product/stop")
+    def stop_product(feature_id: str) -> dict[str, Any]:
+        state = _load(feature_id)
+        launcher.stop(feature_id)
+        return build_handoff(state, settings, None)
 
     # ---------------------------------------------------------------- queries
     @app.get("/api/features")
@@ -107,7 +148,20 @@ def create_app(engine: WorkflowEngine | None = None) -> FastAPI:
             run["raw_output"] = run["raw_output"][-1200:]
         data["paused"] = state.is_paused()
         data["terminal"] = state.is_terminal()
+        data["llm_usage"] = _usage_with_cost(store.llm_usage(feature_id))
         return data
+
+    def _usage_with_cost(u: dict[str, Any]) -> dict[str, Any]:
+        s = settings
+        u = {**u, "model": s.openai_model if s.llm_provider == "openai" else s.anthropic_model if s.llm_provider == "anthropic" else s.llm_provider,
+             "budget": s.llm_token_budget_per_feature, "effort_code": s.llm_effort_code, "effort_default": s.llm_effort_default}
+        if None in (s.llm_price_input_per_1m, s.llm_price_output_per_1m):
+            u["cost_usd"] = None
+            return u
+        cached_price = s.llm_price_cached_input_per_1m if s.llm_price_cached_input_per_1m is not None else s.llm_price_input_per_1m
+        fresh = u["input_tokens"] - u["cached_input_tokens"]
+        u["cost_usd"] = round((fresh * s.llm_price_input_per_1m + u["cached_input_tokens"] * cached_price + u["output_tokens"] * s.llm_price_output_per_1m) / 1e6, 4)
+        return u
 
     @app.get("/api/features/{feature_id}/artifacts/{name}")
     def get_artifact(feature_id: str, name: str) -> Any:
@@ -154,6 +208,7 @@ def create_app(engine: WorkflowEngine | None = None) -> FastAPI:
     @app.delete("/api/features/{feature_id}", status_code=204)
     def delete_feature(feature_id: str) -> None:
         _load(feature_id)
+        launcher.stop(feature_id)
         store.delete_feature(feature_id)
 
     # -------------------------------------------------------------- dashboard

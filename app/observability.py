@@ -67,9 +67,11 @@ class EventLog:
         self.store.add_event(self.feature_id, type_, actor, summary, payload)
 
     def llm_observer(self, call: dict[str, Any]) -> None:
+        u = call.get("usage") or {}
+        tokens = f", {u['input_tokens']:,} in ({u['cached_input_tokens']:,} cached) / {u['output_tokens']:,} out" if u else ""
         self.emit(
             EVENT_AGENT,
             call["agent"],
-            f"{call['agent']} -> {call['schema']} via {call['provider']} ({'ok' if call['ok'] else 'invalid'}, attempt {call['attempt']}, {call['duration_seconds']}s)",
+            f"{call['agent']} -> {call['schema']} via {call['provider']} ({'ok' if call['ok'] else 'invalid'}, attempt {call['attempt']}, {call['duration_seconds']}s{tokens})",
             **call,
         )

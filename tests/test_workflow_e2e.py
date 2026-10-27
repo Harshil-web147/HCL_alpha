@@ -115,3 +115,63 @@ def test_auto_apply_policy_skips_the_remediation_pause(store, settings, gate_con
     assert state.stage == Stage.AWAITING_RELEASE_APPROVAL
     assert state.modifications[0].approved_by == "auto-policy"
     assert all(g.passed for g in state.latest_gate_results().values())
+
+
+class _NeedsGuidanceFirst:
+    """Stub provider whose defect resolver asks for guidance until the developer has given some."""
+
+    name = "stub"
+
+    def __init__(self):
+        from app.llm.stub import StubProvider
+
+        self.stub = StubProvider()
+        self.remediation_prompts: list[str] = []
+
+    def complete_json(self, *, agent, system, user, schema):
+        if schema.__name__ == "RemediationProposal":
+            self.remediation_prompts.append(user)
+            if "Use os.environ for the secret" not in user:
+                return {"failure_summary": "secret detected", "probable_cause": "Where should the secret come from?",
+                        "affected_files": [], "changes": [], "confidence": "low"}
+        return self.stub.complete_json(agent=agent, system=system, user=user, schema=schema)
+
+
+def test_ai_asks_for_guidance_and_retries_with_the_answer(store, settings, gate_config):
+    provider = _NeedsGuidanceFirst()
+    engine = WorkflowEngine(store, settings, provider=provider, gate_config=gate_config)
+    from tests.conftest import EXAMPLE_REQUEST
+
+    fid = engine.create(EXAMPLE_REQUEST).feature_id
+    engine.run(fid)
+    _approve(engine, fid, "design")
+    state = engine.run(fid)
+    # the agent gave up -> the workflow pauses for the developer instead of skipping ahead
+    assert state.stage == Stage.AWAITING_REMEDIATION_APPROVAL and state.remediation_proposal.changes == []
+    with pytest.raises(WorkflowError, match="needs guidance"):
+        _approve(engine, fid, "remediation")  # approving without an answer is refused
+
+    state = _approve(engine, fid, "remediation", comment="Use os.environ for the secret")
+    assert state.stage == Stage.REMEDIATING and state.remediation_guidance == ["Use os.environ for the secret"]
+    assert state.human_feedback == []  # guidance never leaks into requirement/design prompts
+    state = engine.run(fid)
+    assert state.stage == Stage.AWAITING_REMEDIATION_APPROVAL and state.remediation_proposal.changes  # real fix now
+    assert "DEVELOPER GUIDANCE" in provider.remediation_prompts[-1]
+    _approve(engine, fid, "remediation")
+    state = engine.run(fid)
+    assert state.stage == Stage.AWAITING_RELEASE_APPROVAL
+    assert all(g.passed for g in state.latest_gate_results().values())
+
+
+def test_skipping_guidance_escalates_to_release_assessment(store, settings, gate_config):
+    engine = WorkflowEngine(store, settings, provider=_NeedsGuidanceFirst(), gate_config=gate_config)
+    from tests.conftest import EXAMPLE_REQUEST
+
+    fid = engine.create(EXAMPLE_REQUEST).feature_id
+    engine.run(fid)
+    _approve(engine, fid, "design")
+    engine.run(fid)
+    state = _approve(engine, fid, "remediation", decision="reject")
+    assert state.stage == Stage.TRACEABILITY_CHECK
+    state = engine.run(fid)
+    assert state.stage == Stage.AWAITING_RELEASE_APPROVAL and state.release_assessment.decision == ReleaseDecision.NOT_READY
