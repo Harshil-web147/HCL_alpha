@@ -1,0 +1,130 @@
+feature feat-2c4294e0 created for 'Customer contact update API' (provider: stub)
+
+== stage: awaiting_design_approval  (iteration 0)
+   gate requirement   PASS  acceptance_criteria_defined=ok; ambiguities_identified=ok; mandatory_nfrs_considered=ok
+
+   [auto-approve] design approved by developer
+
+== stage: awaiting_remediation_approval  (iteration 1)
+   gate requirement   PASS  acceptance_criteria_defined=ok; ambiguities_identified=ok; mandatory_nfrs_considered=ok
+   gate code          PASS  build_succeeds=ok; static_analysis_completed=ok; no_critical_violations=ok
+   gate test          PASS  mandatory_tests_executed=ok; required_tests_pass=ok; acceptance_criteria_have_tests=ok
+   gate security      FAIL  no_blocking_security_findings=FAIL; no_exposed_credentials=FAIL; required_security_checks_completed=ok
+   tool build     passed  compileall ok; import app.main ok
+   tool pytest    passed  15 passed, 0 failed/errored, 0 skipped
+   tool ruff      passed  1 violation(s), 0 critical
+   tool ast       passed  10 files, 42 functions, max complexity 4, 0 structural finding(s)
+   tool bandit    passed  1 issue(s): B105
+   tool secrets   failed  1 exposed credential(s), 0 low-risk match(es)
+   tool pip_audit skipped dependency audit disabled (SDLC_ENABLE_PIP_AUDIT=false)
+   open findings (10):
+     - RUFF-01      LOW      ruff            app/config.py: F401: `sys` imported but unused
+     - BANDIT-01    LOW      bandit          app/config.py: B105 hardcoded_password_string: Possible hardcoded password: 'hardcoded-dev-secr
+     - SECRETS-01   HIGH     secrets         app/config.py: Possible hardcoded credential committed to source
+     - REV-01       MEDIUM   ai_review       app/service.py: Authorization and lookup are repeated in get_contact and update_contact; a share
+     - REV-02       LOW      ai_review       app/repository.py: Module-level singletons (customers, audits) make the data layer hard to swap in 
+     - REV-03       LOW      ai_review       app/main.py: The GET audit endpoint returns the full list; for long-lived customers this grow
+     - REV-04       LOW      ai_review       app/config.py: Dead import: `sys` is imported but never used.
+     - SEC-01       HIGH     security_agent  app/config.py: The bearer-token signing key is hard-coded in source (secrets exposure). Anyone 
+     - SEC-02       MEDIUM   security_agent  app/auth.py: No rate limiting or lockout on repeated invalid-token attempts; signature guessi
+     - SEC-03       LOW      security_agent  app/audit.py: Audit entries store full before/after contact details (PII); retention and acces
+
+   AI proposes changes to ['app/config.py']: Read JWT_SECRET lazily from the environment through a Settings property so the module stays importable for builds and tests while the literal secret is removed; also drops the unused `sys` import flagged by static analysis.
+--- a/app/config.py
++++ b/app/config.py
+@@ -1,17 +1,28 @@
+ """Application configuration.
++
++Secrets are never stored in source: the token signing key is injected through the
++``JWT_SECRET`` environment variable and read lazily so the module can be imported
++(for builds, docs generation, tests) before the deployment environment is wired up.
+ 
+ Implements: NFR-01 (security configuration), NFR-04 (logging configuration)
+ """
+ 
+ import os
+-import sys
+ 
+ SERVICE_NAME = "customer-contact-api"
+ LOG_LEVEL = "INFO"
+ TOKEN_TTL_SECONDS = 3600
+ 
+-# Signing key used to validate bearer tokens.
+-JWT_SECRET = "hardcoded-dev-secret-9f8e7d6c5b4a3210"
++
++class MissingConfiguration(RuntimeError):
++    pass
++
++
++def _require_env(name: str) -> str:
++    value = os.environ.get(name, "").strip()
++    if not value:
++        raise MissingConfiguration(f"Required environment variable {name} is not set")
++    return value
+ 
+ 
+ class Settings:
+@@ -20,7 +31,7 @@
+ 
+     @property
+     def jwt_secret(self) -> str:
+-        return JWT_SECRET
++        return _require_env("JWT_SECRET")
+ 
+     @property
+     def environment(self) -> str:
+
+
+   [auto-approve] remediation approved by developer
+
+== stage: awaiting_release_approval  (iteration 1)
+   gate requirement   PASS  acceptance_criteria_defined=ok; ambiguities_identified=ok; mandatory_nfrs_considered=ok
+   gate code          PASS  build_succeeds=ok; static_analysis_completed=ok; no_critical_violations=ok
+   gate test          PASS  mandatory_tests_executed=ok; required_tests_pass=ok; acceptance_criteria_have_tests=ok
+   gate security      PASS  no_blocking_security_findings=ok; no_exposed_credentials=ok; required_security_checks_completed=ok
+   gate traceability  PASS  requirements_mapped_to_code=ok; acceptance_criteria_mapped_to_tests=ok; tests_have_execution_results=ok
+   gate release       PASS  mandatory_gates_passed=ok; no_unresolved_blocking_defects=ok; required_human_approvals_recorded=ok
+   tool build     passed  compileall ok; import app.main ok
+   tool pytest    passed  15 passed, 0 failed/errored, 0 skipped
+   tool ruff      passed  0 violation(s), 0 critical
+   tool ast       passed  10 files, 43 functions, max complexity 4, 0 structural finding(s)
+   tool bandit    passed  no issues
+   tool secrets   passed  0 exposed credential(s), 0 low-risk match(es)
+   tool pip_audit skipped dependency audit disabled (SDLC_ENABLE_PIP_AUDIT=false)
+   open findings (5):
+     - REV-01       MEDIUM   ai_review       app/service.py: Authorization and lookup are repeated in get_contact and update_contact; a share
+     - REV-02       LOW      ai_review       app/repository.py: Module-level singletons (customers, audits) make the data layer hard to swap in 
+     - REV-03       LOW      ai_review       app/main.py: The GET audit endpoint returns the full list; for long-lived customers this grow
+     - SEC-02       MEDIUM   security_agent  app/auth.py: No rate limiting or lockout on repeated invalid-token attempts; signature guessi
+     - SEC-03       LOW      security_agent  app/audit.py: Audit entries store full before/after contact details (PII); retention and acces
+
+   release recommendation: CONDITIONAL - All mandatory gates passed, tests are green and no blocking findings remain. Medium-severity hardening items (rate limiting, duplicate authorization logic) should be tracked before go-live.
+
+   [auto-approve] release approved by developer
+
+== stage: completed  (iteration 1)
+   gate requirement   PASS  acceptance_criteria_defined=ok; ambiguities_identified=ok; mandatory_nfrs_considered=ok
+   gate code          PASS  build_succeeds=ok; static_analysis_completed=ok; no_critical_violations=ok
+   gate test          PASS  mandatory_tests_executed=ok; required_tests_pass=ok; acceptance_criteria_have_tests=ok
+   gate security      PASS  no_blocking_security_findings=ok; no_exposed_credentials=ok; required_security_checks_completed=ok
+   gate traceability  PASS  requirements_mapped_to_code=ok; acceptance_criteria_mapped_to_tests=ok; tests_have_execution_results=ok
+   gate release       PASS  mandatory_gates_passed=ok; no_unresolved_blocking_defects=ok; required_human_approvals_recorded=ok
+   tool build     passed  compileall ok; import app.main ok
+   tool pytest    passed  15 passed, 0 failed/errored, 0 skipped
+   tool ruff      passed  0 violation(s), 0 critical
+   tool ast       passed  10 files, 43 functions, max complexity 4, 0 structural finding(s)
+   tool bandit    passed  no issues
+   tool secrets   passed  0 exposed credential(s), 0 low-risk match(es)
+   tool pip_audit skipped dependency audit disabled (SDLC_ENABLE_PIP_AUDIT=false)
+   open findings (5):
+     - REV-01       MEDIUM   ai_review       app/service.py: Authorization and lookup are repeated in get_contact and update_contact; a share
+     - REV-02       LOW      ai_review       app/repository.py: Module-level singletons (customers, audits) make the data layer hard to swap in 
+     - REV-03       LOW      ai_review       app/main.py: The GET audit endpoint returns the full list; for long-lived customers this grow
+     - SEC-02       MEDIUM   security_agent  app/auth.py: No rate limiting or lockout on repeated invalid-token attempts; signature guessi
+     - SEC-03       LOW      security_agent  app/audit.py: Audit entries store full before/after contact details (PII); retention and acces
+
+== finished: completed
+   decision: CONDITIONAL
+   traceability: requirements 100.0%, AC 100.0%, tests with results 100.0%
+   workspace: /tmp/sdlc-sample/ws/feat-2c4294e0
+   report written to docs/sample-run/workflow-report.json

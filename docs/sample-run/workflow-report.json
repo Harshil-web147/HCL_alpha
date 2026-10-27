@@ -1,0 +1,2323 @@
+{
+  "feature_id": "feat-2c4294e0",
+  "request": {
+    "title": "Customer contact update API",
+    "description": "Develop an API allowing customers to update their contact information. Validate mandatory fields, prevent unauthorized modification, maintain an audit record and return appropriate API error responses.",
+    "context": "",
+    "requested_by": "developer",
+    "language": "python",
+    "framework": "fastapi"
+  },
+  "stage": "completed",
+  "iteration": 1,
+  "created_at": "2026-10-27T07:23:16+00:00",
+  "updated_at": "2026-10-27T07:23:20+00:00",
+  "error": "",
+  "requirement_analysis": {
+    "summary": "Customer contact update API: expose an authenticated API that lets a customer replace their contact information (email, phone, postal address), validates mandatory fields, rejects modification by anyone other than the owner, writes an immutable audit record for every change and returns a consistent machine-readable error envelope.",
+    "functional_requirements": [
+      {
+        "id": "FR-01",
+        "description": "Expose an API endpoint that updates a customer's contact information (email, phone, address).",
+        "priority": "must",
+        "rationale": "Core feature request."
+      },
+      {
+        "id": "FR-02",
+        "description": "Validate mandatory fields (email, phone, address line 1, city, postal code, country) and their formats before persisting.",
+        "priority": "must",
+        "rationale": "Explicitly requested."
+      },
+      {
+        "id": "FR-03",
+        "description": "Authenticate the caller and only allow a customer to modify their own contact information.",
+        "priority": "must",
+        "rationale": "Prevent unauthorized modification."
+      },
+      {
+        "id": "FR-04",
+        "description": "Record an audit entry (actor, timestamp, request id, before/after state) for every successful update.",
+        "priority": "must",
+        "rationale": "Maintain an audit record."
+      },
+      {
+        "id": "FR-05",
+        "description": "Return appropriate HTTP status codes (401, 403, 404, 422) with a uniform error envelope.",
+        "priority": "must",
+        "rationale": "Appropriate API error responses."
+      }
+    ],
+    "non_functional_requirements": [
+      {
+        "id": "NFR-01",
+        "description": "Security: credentials and signing keys must come from configuration, not source; logs must not contain personal data.",
+        "priority": "must",
+        "rationale": ""
+      },
+      {
+        "id": "NFR-02",
+        "description": "Audit records are append-only and cannot be modified through the API.",
+        "priority": "must",
+        "rationale": ""
+      },
+      {
+        "id": "NFR-03",
+        "description": "Performance: p95 latency for the update endpoint under 300 ms at 100 req/s.",
+        "priority": "should",
+        "rationale": ""
+      },
+      {
+        "id": "NFR-04",
+        "description": "Logging/observability: every request carries a request id that is logged and stored with the audit entry.",
+        "priority": "should",
+        "rationale": ""
+      }
+    ],
+    "business_rules": [
+      {
+        "id": "BR-01",
+        "description": "A customer may only update their own contact information."
+      },
+      {
+        "id": "BR-02",
+        "description": "Email, phone, address line 1, city, postal code and country are mandatory; the update is a full replacement."
+      },
+      {
+        "id": "BR-03",
+        "description": "Audit entries are immutable once written."
+      }
+    ],
+    "user_stories": [
+      {
+        "id": "US-01",
+        "role": "customer",
+        "goal": "update my contact information through the API",
+        "benefit": "my records stay current without contacting support",
+        "requirement_ids": [
+          "FR-01",
+          "FR-02"
+        ]
+      },
+      {
+        "id": "US-02",
+        "role": "security officer",
+        "goal": "have unauthenticated or non-owner update attempts rejected",
+        "benefit": "customer data cannot be tampered with",
+        "requirement_ids": [
+          "FR-03"
+        ]
+      },
+      {
+        "id": "US-03",
+        "role": "compliance officer",
+        "goal": "see who changed which contact fields and when",
+        "benefit": "regulatory audit requests can be answered",
+        "requirement_ids": [
+          "FR-04"
+        ]
+      },
+      {
+        "id": "US-04",
+        "role": "API consumer",
+        "goal": "receive consistent, descriptive error responses",
+        "benefit": "client applications can handle failures predictably",
+        "requirement_ids": [
+          "FR-05"
+        ]
+      }
+    ],
+    "acceptance_criteria": [
+      {
+        "id": "AC-01",
+        "story_id": "US-01",
+        "given": "an authenticated customer with a valid payload",
+        "when": "they PUT their contact information",
+        "then": "the API returns 200 with the updated record and the change is persisted",
+        "measurable": true
+      },
+      {
+        "id": "AC-02",
+        "story_id": "US-01",
+        "given": "a payload with a missing or malformed mandatory field",
+        "when": "the customer submits the update",
+        "then": "the API returns 422 listing each invalid field and nothing is persisted",
+        "measurable": true
+      },
+      {
+        "id": "AC-03",
+        "story_id": "US-02",
+        "given": "a request without a valid bearer token",
+        "when": "the update is attempted",
+        "then": "the API returns 401 UNAUTHENTICATED",
+        "measurable": true
+      },
+      {
+        "id": "AC-04",
+        "story_id": "US-02",
+        "given": "a valid token belonging to a different customer",
+        "when": "the update is attempted",
+        "then": "the API returns 403 FORBIDDEN and the target record is unchanged",
+        "measurable": true
+      },
+      {
+        "id": "AC-05",
+        "story_id": "US-03",
+        "given": "a successful update",
+        "when": "the audit history is read",
+        "then": "exactly one entry exists with actor, request id, timestamp and before/after contact state",
+        "measurable": true
+      },
+      {
+        "id": "AC-06",
+        "story_id": "US-04",
+        "given": "any failing request (unknown customer, validation, auth)",
+        "when": "the error is returned",
+        "then": "the body is {error:{code,message,details}} with the matching HTTP status (404 for unknown customers)",
+        "measurable": true
+      }
+    ],
+    "assumptions": [
+      {
+        "id": "AS-01",
+        "description": "Customer records already exist; customer creation is out of scope.",
+        "needs_confirmation": true
+      },
+      {
+        "id": "AS-02",
+        "description": "Bearer tokens are issued by the existing identity provider; this service only validates them.",
+        "needs_confirmation": true
+      },
+      {
+        "id": "AS-03",
+        "description": "The update is a full replacement of contact details (no PATCH / partial update).",
+        "needs_confirmation": true
+      },
+      {
+        "id": "AS-04",
+        "description": "An in-memory repository is acceptable for the prototype; production will use PostgreSQL.",
+        "needs_confirmation": false
+      }
+    ],
+    "dependencies": [
+      "Identity provider (token issuance)",
+      "Customer master data store",
+      "Audit log storage / retention policy"
+    ],
+    "technical_questions": [
+      "Should email changes trigger a verification flow before taking effect?",
+      "Is rate limiting required on authentication failures?",
+      "What is the retention period for audit records?"
+    ],
+    "ambiguities": [
+      {
+        "id": "AMB-01",
+        "description": "The request does not list which contact fields are mandatory.",
+        "impact": "high",
+        "clarification_question": "Which of email, phone, address line 2 are mandatory?",
+        "proposed_default": "email, phone, line1, city, postal_code, country mandatory; line2 optional."
+      },
+      {
+        "id": "AMB-02",
+        "description": "It is unclear whether support agents or admins may update on a customer's behalf.",
+        "impact": "high",
+        "clarification_question": "Are there privileged roles that may modify any customer's contact data?",
+        "proposed_default": "Owner-only; a privileged role can be added later."
+      },
+      {
+        "id": "AMB-03",
+        "description": "Email uniqueness across customers is not specified.",
+        "impact": "medium",
+        "clarification_question": "Must an email be unique per customer?",
+        "proposed_default": "Not enforced in this iteration."
+      },
+      {
+        "id": "AMB-04",
+        "description": "Who may read the audit trail is not specified.",
+        "impact": "medium",
+        "clarification_question": "Is the audit history visible to the customer, compliance only, or both?",
+        "proposed_default": "Owner can read their own history."
+      }
+    ]
+  },
+  "technical_design": {
+    "overview": "Layered FastAPI service: a thin API layer delegates to a ContactService that enforces ownership authorization, validates through Pydantic schemas, persists via a repository abstraction and records before/after state through an AuditService. Errors are raised as ApiError and rendered by central exception handlers into a uniform envelope.",
+    "components": [
+      {
+        "name": "Customer API",
+        "responsibility": "HTTP routing, request parsing, response models (FastAPI)",
+        "requirement_ids": [
+          "FR-01",
+          "FR-05"
+        ]
+      },
+      {
+        "name": "Authentication",
+        "responsibility": "Validate bearer tokens (HMAC-SHA256) and resolve the caller identity",
+        "requirement_ids": [
+          "FR-03"
+        ]
+      },
+      {
+        "name": "Profile Service",
+        "responsibility": "Business logic: ownership authorization, update orchestration, PII-safe logging",
+        "requirement_ids": [
+          "FR-01",
+          "FR-03",
+          "FR-04"
+        ]
+      },
+      {
+        "name": "Validation Schemas",
+        "responsibility": "Mandatory-field and format validation for the request payload",
+        "requirement_ids": [
+          "FR-02"
+        ]
+      },
+      {
+        "name": "Repository",
+        "responsibility": "Data-access layer for customer records (in-memory for the prototype)",
+        "requirement_ids": [
+          "FR-01"
+        ]
+      },
+      {
+        "name": "Audit Service",
+        "responsibility": "Append-only record of every contact change with before/after state",
+        "requirement_ids": [
+          "FR-04",
+          "NFR-02"
+        ]
+      },
+      {
+        "name": "Error Handling",
+        "responsibility": "Map ApiError / validation errors to the standard error envelope",
+        "requirement_ids": [
+          "FR-05"
+        ]
+      },
+      {
+        "name": "Configuration & Logging",
+        "responsibility": "Environment-driven settings and masked structured logging",
+        "requirement_ids": [
+          "NFR-01",
+          "NFR-04"
+        ]
+      }
+    ],
+    "component_flow": [
+      "UI",
+      "Customer API",
+      "Authentication",
+      "Profile Service",
+      "Repository",
+      "Audit Service"
+    ],
+    "api": [
+      {
+        "method": "PUT",
+        "path": "/customers/{customer_id}/contact",
+        "description": "Replace the customer's contact information.",
+        "request_schema": {
+          "email": "string (RFC-5322-like)",
+          "phone": "string (+?7-15 digits)",
+          "address": {
+            "line1": "string",
+            "line2": "string?",
+            "city": "string",
+            "postal_code": "string",
+            "country": "ISO-3166-1 alpha-2"
+          }
+        },
+        "response_schema": {
+          "customer_id": "string",
+          "email": "string",
+          "phone": "string",
+          "address": "Address",
+          "updated_at": "ISO-8601"
+        },
+        "error_responses": [
+          {
+            "status": 401,
+            "code": "UNAUTHENTICATED"
+          },
+          {
+            "status": 403,
+            "code": "FORBIDDEN"
+          },
+          {
+            "status": 404,
+            "code": "CUSTOMER_NOT_FOUND"
+          },
+          {
+            "status": 422,
+            "code": "VALIDATION_ERROR"
+          }
+        ],
+        "acceptance_criteria_ids": [
+          "AC-01",
+          "AC-02",
+          "AC-03",
+          "AC-04",
+          "AC-06"
+        ]
+      },
+      {
+        "method": "GET",
+        "path": "/customers/{customer_id}/contact",
+        "description": "Read the customer's current contact information.",
+        "request_schema": {},
+        "response_schema": {
+          "customer_id": "string",
+          "email": "string",
+          "phone": "string",
+          "address": "Address",
+          "updated_at": "ISO-8601"
+        },
+        "error_responses": [
+          {
+            "status": 401,
+            "code": "UNAUTHENTICATED"
+          },
+          {
+            "status": 403,
+            "code": "FORBIDDEN"
+          },
+          {
+            "status": 404,
+            "code": "CUSTOMER_NOT_FOUND"
+          }
+        ],
+        "acceptance_criteria_ids": [
+          "AC-01",
+          "AC-04"
+        ]
+      },
+      {
+        "method": "GET",
+        "path": "/customers/{customer_id}/contact/audit",
+        "description": "List audit entries for the customer's contact changes (owner only).",
+        "request_schema": {},
+        "response_schema": {
+          "items": "AuditEntry[]"
+        },
+        "error_responses": [
+          {
+            "status": 401,
+            "code": "UNAUTHENTICATED"
+          },
+          {
+            "status": 403,
+            "code": "FORBIDDEN"
+          }
+        ],
+        "acceptance_criteria_ids": [
+          "AC-05"
+        ]
+      }
+    ],
+    "data_model": [
+      {
+        "name": "Customer",
+        "fields": [
+          {
+            "name": "customer_id",
+            "type": "string",
+            "required": true,
+            "constraints": "primary key"
+          },
+          {
+            "name": "email",
+            "type": "string",
+            "required": true,
+            "constraints": "max 254, lower-cased"
+          },
+          {
+            "name": "phone",
+            "type": "string",
+            "required": true,
+            "constraints": "+?[0-9]{7,15}"
+          },
+          {
+            "name": "address",
+            "type": "Address",
+            "required": true,
+            "constraints": ""
+          },
+          {
+            "name": "updated_at",
+            "type": "datetime",
+            "required": true,
+            "constraints": ""
+          }
+        ]
+      },
+      {
+        "name": "Address",
+        "fields": [
+          {
+            "name": "line1",
+            "type": "string",
+            "required": true,
+            "constraints": "1-120 chars"
+          },
+          {
+            "name": "line2",
+            "type": "string",
+            "required": false,
+            "constraints": "<=120 chars"
+          },
+          {
+            "name": "city",
+            "type": "string",
+            "required": true,
+            "constraints": "1-80 chars"
+          },
+          {
+            "name": "postal_code",
+            "type": "string",
+            "required": true,
+            "constraints": "3-12 chars"
+          },
+          {
+            "name": "country",
+            "type": "string",
+            "required": true,
+            "constraints": "ISO alpha-2, upper-cased"
+          }
+        ]
+      },
+      {
+        "name": "AuditEntry",
+        "fields": [
+          {
+            "name": "audit_id",
+            "type": "uuid",
+            "required": true,
+            "constraints": ""
+          },
+          {
+            "name": "customer_id",
+            "type": "string",
+            "required": true,
+            "constraints": ""
+          },
+          {
+            "name": "actor_id",
+            "type": "string",
+            "required": true,
+            "constraints": ""
+          },
+          {
+            "name": "action",
+            "type": "string",
+            "required": true,
+            "constraints": "CONTACT_UPDATED"
+          },
+          {
+            "name": "before",
+            "type": "json",
+            "required": true,
+            "constraints": ""
+          },
+          {
+            "name": "after",
+            "type": "json",
+            "required": true,
+            "constraints": ""
+          },
+          {
+            "name": "request_id",
+            "type": "string",
+            "required": true,
+            "constraints": ""
+          },
+          {
+            "name": "recorded_at",
+            "type": "datetime",
+            "required": true,
+            "constraints": ""
+          }
+        ]
+      }
+    ],
+    "validation_rules": [
+      "email: mandatory, matches a basic RFC-5322 pattern, normalised to lower case",
+      "phone: mandatory, optional leading +, 7-15 digits after removing spaces",
+      "address.line1/city/postal_code/country: mandatory with length limits; country upper-cased ISO alpha-2",
+      "Unknown fields are ignored; the payload is a full replacement"
+    ],
+    "error_handling": "Domain errors raise ApiError(status, code, message, details); a global handler renders {error:{code,message,details}}. Pydantic validation errors are converted to 422 VALIDATION_ERROR with one detail per field.",
+    "logging": "Structured log line per update with masked email/phone and the request id; authorization denials logged at WARNING. No raw PII in logs.",
+    "security": [
+      "Bearer token validated with HMAC-SHA256 and constant-time comparison",
+      "Ownership check in the service layer (actor_id == customer_id) before any read or write",
+      "Signing key loaded from environment configuration, never from source",
+      "Audit log is append-only; no API deletes or edits entries"
+    ],
+    "file_plan": [
+      {
+        "path": "app/main.py",
+        "purpose": "FastAPI app factory and routes",
+        "implements": [
+          "FR-01",
+          "FR-05",
+          "AC-01",
+          "AC-06"
+        ]
+      },
+      {
+        "path": "app/auth.py",
+        "purpose": "Bearer token verification",
+        "implements": [
+          "FR-03",
+          "AC-03"
+        ]
+      },
+      {
+        "path": "app/service.py",
+        "purpose": "Business logic and ownership authorization",
+        "implements": [
+          "FR-01",
+          "FR-03",
+          "FR-04",
+          "AC-04",
+          "AC-05"
+        ]
+      },
+      {
+        "path": "app/schemas.py",
+        "purpose": "Request/response validation",
+        "implements": [
+          "FR-02",
+          "AC-02"
+        ]
+      },
+      {
+        "path": "app/repository.py",
+        "purpose": "Data-access layer",
+        "implements": [
+          "FR-01",
+          "FR-04"
+        ]
+      },
+      {
+        "path": "app/audit.py",
+        "purpose": "Audit record creation",
+        "implements": [
+          "FR-04",
+          "NFR-02",
+          "AC-05"
+        ]
+      },
+      {
+        "path": "app/errors.py",
+        "purpose": "Error envelope and handlers",
+        "implements": [
+          "FR-05",
+          "AC-06"
+        ]
+      },
+      {
+        "path": "app/config.py",
+        "purpose": "Environment configuration",
+        "implements": [
+          "NFR-01"
+        ]
+      },
+      {
+        "path": "app/logging_config.py",
+        "purpose": "Masked structured logging",
+        "implements": [
+          "NFR-01",
+          "NFR-04"
+        ]
+      }
+    ]
+  },
+  "code_bundle": {
+    "language": "python",
+    "framework": "fastapi",
+    "files": [
+      {
+        "path": "app/main.py",
+        "content": "<2072 chars - see workspace>",
+        "implements": [
+          "FR-01",
+          "FR-05",
+          "AC-01",
+          "AC-06"
+        ]
+      },
+      {
+        "path": "app/auth.py",
+        "content": "<1574 chars - see workspace>",
+        "implements": [
+          "FR-03",
+          "AC-03"
+        ]
+      },
+      {
+        "path": "app/service.py",
+        "content": "<2379 chars - see workspace>",
+        "implements": [
+          "FR-01",
+          "FR-03",
+          "FR-04",
+          "AC-01",
+          "AC-04",
+          "AC-05",
+          "AC-06"
+        ]
+      },
+      {
+        "path": "app/schemas.py",
+        "content": "<1896 chars - see workspace>",
+        "implements": [
+          "FR-02",
+          "AC-02"
+        ]
+      },
+      {
+        "path": "app/repository.py",
+        "content": "<3502 chars - see workspace>",
+        "implements": [
+          "FR-01",
+          "FR-04"
+        ]
+      },
+      {
+        "path": "app/audit.py",
+        "content": "<1145 chars - see workspace>",
+        "implements": [
+          "FR-04",
+          "NFR-02",
+          "AC-05"
+        ]
+      },
+      {
+        "path": "app/errors.py",
+        "content": "<1885 chars - see workspace>",
+        "implements": [
+          "FR-05",
+          "AC-06"
+        ]
+      },
+      {
+        "path": "app/config.py",
+        "content": "<1017 chars - see workspace>",
+        "implements": [
+          "NFR-01"
+        ]
+      },
+      {
+        "path": "app/logging_config.py",
+        "content": "<898 chars - see workspace>",
+        "implements": [
+          "NFR-01",
+          "NFR-04"
+        ]
+      },
+      {
+        "path": "app/__init__.py",
+        "content": "<76 chars - see workspace>",
+        "implements": []
+      },
+      {
+        "path": "requirements.txt",
+        "content": "<53 chars - see workspace>",
+        "implements": []
+      },
+      {
+        "path": "pytest.ini",
+        "content": "<72 chars - see workspace>",
+        "implements": []
+      }
+    ],
+    "run_instructions": "export JWT_SECRET=<key>; pip install -r requirements.txt; uvicorn app.main:app --reload",
+    "notes": "Generated code is a proposal for review - it is not production-ready until every quality gate and the human approvals pass."
+  },
+  "test_bundle": {
+    "files": [
+      {
+        "path": "tests/__init__.py",
+        "content": "<20 chars - see workspace>",
+        "implements": []
+      },
+      {
+        "path": "tests/conftest.py",
+        "content": "<1216 chars - see workspace>",
+        "implements": []
+      },
+      {
+        "path": "tests/test_contact_api.py",
+        "content": "<6207 chars - see workspace>",
+        "implements": [
+          "AC-01",
+          "AC-02",
+          "AC-03",
+          "AC-04",
+          "AC-05",
+          "AC-06"
+        ]
+      }
+    ],
+    "test_cases": [
+      {
+        "name": "test_update_contact_success_returns_updated_contact",
+        "category": "positive",
+        "acceptance_criteria_ids": [
+          "AC-01"
+        ],
+        "description": "test update contact success returns updated contact"
+      },
+      {
+        "name": "test_update_contact_persists_and_is_readable",
+        "category": "positive",
+        "acceptance_criteria_ids": [
+          "AC-01"
+        ],
+        "description": "test update contact persists and is readable"
+      },
+      {
+        "name": "test_missing_mandatory_email_returns_422",
+        "category": "validation",
+        "acceptance_criteria_ids": [
+          "AC-02",
+          "AC-06"
+        ],
+        "description": "test missing mandatory email returns 422"
+      },
+      {
+        "name": "test_invalid_email_format_returns_422",
+        "category": "validation",
+        "acceptance_criteria_ids": [
+          "AC-02"
+        ],
+        "description": "test invalid email format returns 422"
+      },
+      {
+        "name": "test_missing_address_city_returns_422",
+        "category": "validation",
+        "acceptance_criteria_ids": [
+          "AC-02"
+        ],
+        "description": "test missing address city returns 422"
+      },
+      {
+        "name": "test_phone_boundary_min_and_max_length_accepted",
+        "category": "boundary",
+        "acceptance_criteria_ids": [
+          "AC-02"
+        ],
+        "description": "test phone boundary min and max length accepted"
+      },
+      {
+        "name": "test_phone_outside_boundary_rejected",
+        "category": "boundary",
+        "acceptance_criteria_ids": [
+          "AC-02"
+        ],
+        "description": "test phone outside boundary rejected"
+      },
+      {
+        "name": "test_missing_token_returns_401",
+        "category": "authorization",
+        "acceptance_criteria_ids": [
+          "AC-03"
+        ],
+        "description": "test missing token returns 401"
+      },
+      {
+        "name": "test_tampered_token_returns_401",
+        "category": "authorization",
+        "acceptance_criteria_ids": [
+          "AC-03"
+        ],
+        "description": "test tampered token returns 401"
+      },
+      {
+        "name": "test_other_customer_cannot_modify_returns_403_and_no_change",
+        "category": "authorization",
+        "acceptance_criteria_ids": [
+          "AC-04"
+        ],
+        "description": "test other customer cannot modify returns 403 and no change"
+      },
+      {
+        "name": "test_audit_endpoint_requires_owner",
+        "category": "authorization",
+        "acceptance_criteria_ids": [
+          "AC-04",
+          "AC-05"
+        ],
+        "description": "test audit endpoint requires owner"
+      },
+      {
+        "name": "test_unknown_customer_returns_404",
+        "category": "negative",
+        "acceptance_criteria_ids": [
+          "AC-06"
+        ],
+        "description": "test unknown customer returns 404"
+      },
+      {
+        "name": "test_error_response_envelope_shape",
+        "category": "api",
+        "acceptance_criteria_ids": [
+          "AC-06"
+        ],
+        "description": "test error response envelope shape"
+      },
+      {
+        "name": "test_audit_record_created_with_before_and_after",
+        "category": "positive",
+        "acceptance_criteria_ids": [
+          "AC-05"
+        ],
+        "description": "test audit record created with before and after"
+      },
+      {
+        "name": "test_failed_update_creates_no_audit_record",
+        "category": "negative",
+        "acceptance_criteria_ids": [
+          "AC-04",
+          "AC-05"
+        ],
+        "description": "test failed update creates no audit record"
+      }
+    ]
+  },
+  "review_report": {
+    "summary": "Logic is correct and error handling is consistent; findings concern maintainability (duplicate authorization/lookup), testability of module singletons and unbounded audit listing. No blocking defects.",
+    "findings": [
+      {
+        "id": "REV-01",
+        "severity": "MEDIUM",
+        "component": "Profile Service",
+        "finding": "Authorization and lookup are repeated in get_contact and update_contact; a shared _load_owned_customer helper would remove the duplicate 404 handling.",
+        "evidence": "app/service.py: both methods call _authorize() then customers.get() inside try/except CustomerNotFound.",
+        "recommended_fix": "Extract a private helper that authorizes and loads the record, used by both methods.",
+        "source": "ai_review",
+        "category": "duplicate_logic",
+        "file": "app/service.py",
+        "line": 36,
+        "status": "open",
+        "iteration": 1
+      },
+      {
+        "id": "REV-02",
+        "severity": "LOW",
+        "component": "Repository",
+        "finding": "Module-level singletons (customers, audits) make the data layer hard to swap in tests and for a future PostgreSQL implementation.",
+        "evidence": "app/repository.py: `customers = CustomerRepository()` / `audits = AuditRepository()` imported directly by main.py.",
+        "recommended_fix": "Provide the repositories through FastAPI dependencies or an app-state container.",
+        "source": "ai_review",
+        "category": "testability",
+        "file": "app/repository.py",
+        "line": 117,
+        "status": "open",
+        "iteration": 1
+      },
+      {
+        "id": "REV-03",
+        "severity": "LOW",
+        "component": "Customer API",
+        "finding": "The GET audit endpoint returns the full list; for long-lived customers this grows unbounded (potential performance concern).",
+        "evidence": "app/main.py audit_history returns every entry from service.audit_history().",
+        "recommended_fix": "Add limit/offset pagination query parameters.",
+        "source": "ai_review",
+        "category": "performance",
+        "file": "app/main.py",
+        "line": 55,
+        "status": "open",
+        "iteration": 1
+      }
+    ],
+    "verdict": "comment"
+  },
+  "security_report": {
+    "summary": "Authentication uses HMAC-SHA256 with constant-time comparison and ownership is enforced before every read/write; input validation is strict; no SQL/command injection or unsafe deserialization surfaces. No blocking findings; residual items are hardening recommendations.",
+    "findings": [
+      {
+        "id": "SEC-02",
+        "severity": "MEDIUM",
+        "component": "Authentication",
+        "finding": "No rate limiting or lockout on repeated invalid-token attempts; signature guessing is impractical with HMAC-SHA256 but the endpoint can be abused for enumeration of customer ids via 403 vs 404 responses.",
+        "evidence": "app/auth.py verify_token raises 401 immediately; app/service.py returns 403 before 404 so an attacker with a valid token cannot enumerate ids, but unauthenticated callers receive distinct 401/422 behaviour.",
+        "recommended_fix": "Add a rate limiter (e.g. per token / per IP) at the gateway and keep the 403-before-404 ordering.",
+        "source": "security_agent",
+        "category": "authentication_controls",
+        "file": "app/auth.py",
+        "line": 30,
+        "status": "open",
+        "iteration": 1
+      },
+      {
+        "id": "SEC-03",
+        "severity": "LOW",
+        "component": "Audit Service",
+        "finding": "Audit entries store full before/after contact details (PII); retention and access controls for the audit store must be defined.",
+        "evidence": "app/audit.py _contact_view stores email, phone and address verbatim.",
+        "recommended_fix": "Apply the organisation's PII retention policy to the audit store and restrict read access.",
+        "source": "security_agent",
+        "category": "logging_sensitive_information",
+        "file": "app/audit.py",
+        "line": 40,
+        "status": "open",
+        "iteration": 1
+      }
+    ]
+  },
+  "remediation_proposal": {
+    "failure_summary": "Security gate failed: a hard-coded signing secret was detected in app/config.py by the secret scanner, Bandit (B105) and the Security Review agent.",
+    "probable_cause": "The configuration module defines JWT_SECRET as a string literal instead of reading it from the deployment environment.",
+    "affected_files": [
+      "app/config.py"
+    ],
+    "changes": [
+      {
+        "path": "app/config.py",
+        "content": "\"\"\"Application configuration.\n\nSecrets are never stored in source: the token signing key is injected through the\n``JWT_SECRET`` environment variable and read lazily so the module can be imported\n(for builds, docs generation, tests) before the deployment environment is wired up.\n\nImplements: NFR-01 (security configuration), NFR-04 (logging configuration)\n\"\"\"\n\nimport os\n\nSERVICE_NAME = \"customer-contact-api\"\nLOG_LEVEL = \"INFO\"\nTOKEN_TTL_SECONDS = 3600\n\n\nclass MissingConfiguration(RuntimeError):\n    pass\n\n\ndef _require_env(name: str) -> str:\n    value = os.environ.get(name, \"\").strip()\n    if not value:\n        raise MissingConfiguration(f\"Required environment variable {name} is not set\")\n    return value\n\n\nclass Settings:\n    service_name: str = SERVICE_NAME\n    log_level: str = LOG_LEVEL\n\n    @property\n    def jwt_secret(self) -> str:\n        return _require_env(\"JWT_SECRET\")\n\n    @property\n    def environment(self) -> str:\n        return os.environ.get(\"APP_ENV\", \"development\")\n\n\nsettings = Settings()\n",
+        "implements": [
+          "NFR-01"
+        ]
+      }
+    ],
+    "addressed_finding_ids": [
+      "SECRETS-01",
+      "SEC-01"
+    ],
+    "rationale": "Read JWT_SECRET lazily from the environment through a Settings property so the module stays importable for builds and tests while the literal secret is removed; also drops the unused `sys` import flagged by static analysis.",
+    "confidence": "high"
+  },
+  "release_assessment": {
+    "decision": "CONDITIONAL",
+    "rationale": "All mandatory gates passed, tests are green and no blocking findings remain. Medium-severity hardening items (rate limiting, duplicate authorization logic) should be tracked before go-live.",
+    "evidence": [
+      "Gate requirement: PASSED (3/3 checks)",
+      "Gate code: PASSED (3/3 checks)",
+      "Gate test: PASSED (3/3 checks)",
+      "Gate security: PASSED (3/3 checks)",
+      "Gate traceability: PASSED (3/3 checks)",
+      "Gate release: PASSED (3/3 checks)",
+      "Tool build: passed - compileall ok; import app.main ok",
+      "Tool pytest: passed - 15 passed, 0 failed/errored, 0 skipped",
+      "Tool ruff: passed - 0 violation(s), 0 critical",
+      "Tool ast: passed - 10 files, 43 functions, max complexity 4, 0 structural finding(s)",
+      "Tool bandit: passed - no issues",
+      "Tool secrets: passed - 0 exposed credential(s), 0 low-risk match(es)"
+    ],
+    "conditions": [
+      "Track SEC-02 (rate limiting) as a follow-up ticket",
+      "Track REV-01 (duplicate authorization/lookup) for refactoring"
+    ],
+    "residual_risks": [
+      "Audit store retention policy still to be defined (SEC-03)"
+    ],
+    "policy_override": ""
+  },
+  "traceability": {
+    "rows": [
+      {
+        "requirement_id": "FR-01",
+        "story_ids": [
+          "US-01"
+        ],
+        "acceptance_criteria_ids": [
+          "AC-01",
+          "AC-02"
+        ],
+        "design_components": [
+          "Customer API",
+          "Profile Service",
+          "Repository"
+        ],
+        "code_files": [
+          "app/main.py",
+          "app/repository.py",
+          "app/schemas.py",
+          "app/service.py"
+        ],
+        "tests": [
+          "test_invalid_email_format_returns_422",
+          "test_missing_address_city_returns_422",
+          "test_missing_mandatory_email_returns_422",
+          "test_phone_boundary_min_and_max_length_accepted",
+          "test_phone_outside_boundary_rejected",
+          "test_update_contact_persists_and_is_readable",
+          "test_update_contact_success_returns_updated_contact"
+        ],
+        "test_outcomes": {
+          "test_invalid_email_format_returns_422": "passed",
+          "test_missing_address_city_returns_422": "passed",
+          "test_missing_mandatory_email_returns_422": "passed",
+          "test_phone_boundary_min_and_max_length_accepted": "passed",
+          "test_phone_outside_boundary_rejected": "passed",
+          "test_update_contact_persists_and_is_readable": "passed",
+          "test_update_contact_success_returns_updated_contact": "passed"
+        }
+      },
+      {
+        "requirement_id": "FR-02",
+        "story_ids": [
+          "US-01"
+        ],
+        "acceptance_criteria_ids": [
+          "AC-01",
+          "AC-02"
+        ],
+        "design_components": [
+          "Validation Schemas"
+        ],
+        "code_files": [
+          "app/main.py",
+          "app/schemas.py",
+          "app/service.py"
+        ],
+        "tests": [
+          "test_invalid_email_format_returns_422",
+          "test_missing_address_city_returns_422",
+          "test_missing_mandatory_email_returns_422",
+          "test_phone_boundary_min_and_max_length_accepted",
+          "test_phone_outside_boundary_rejected",
+          "test_update_contact_persists_and_is_readable",
+          "test_update_contact_success_returns_updated_contact"
+        ],
+        "test_outcomes": {
+          "test_invalid_email_format_returns_422": "passed",
+          "test_missing_address_city_returns_422": "passed",
+          "test_missing_mandatory_email_returns_422": "passed",
+          "test_phone_boundary_min_and_max_length_accepted": "passed",
+          "test_phone_outside_boundary_rejected": "passed",
+          "test_update_contact_persists_and_is_readable": "passed",
+          "test_update_contact_success_returns_updated_contact": "passed"
+        }
+      },
+      {
+        "requirement_id": "FR-03",
+        "story_ids": [
+          "US-02"
+        ],
+        "acceptance_criteria_ids": [
+          "AC-03",
+          "AC-04"
+        ],
+        "design_components": [
+          "Authentication",
+          "Profile Service"
+        ],
+        "code_files": [
+          "app/auth.py",
+          "app/service.py"
+        ],
+        "tests": [
+          "test_audit_endpoint_requires_owner",
+          "test_failed_update_creates_no_audit_record",
+          "test_missing_token_returns_401",
+          "test_other_customer_cannot_modify_returns_403_and_no_change",
+          "test_tampered_token_returns_401"
+        ],
+        "test_outcomes": {
+          "test_audit_endpoint_requires_owner": "passed",
+          "test_failed_update_creates_no_audit_record": "passed",
+          "test_missing_token_returns_401": "passed",
+          "test_other_customer_cannot_modify_returns_403_and_no_change": "passed",
+          "test_tampered_token_returns_401": "passed"
+        }
+      },
+      {
+        "requirement_id": "FR-04",
+        "story_ids": [
+          "US-03"
+        ],
+        "acceptance_criteria_ids": [
+          "AC-05"
+        ],
+        "design_components": [
+          "Profile Service",
+          "Audit Service"
+        ],
+        "code_files": [
+          "app/audit.py",
+          "app/repository.py",
+          "app/service.py"
+        ],
+        "tests": [
+          "test_audit_endpoint_requires_owner",
+          "test_audit_record_created_with_before_and_after",
+          "test_failed_update_creates_no_audit_record"
+        ],
+        "test_outcomes": {
+          "test_audit_endpoint_requires_owner": "passed",
+          "test_audit_record_created_with_before_and_after": "passed",
+          "test_failed_update_creates_no_audit_record": "passed"
+        }
+      },
+      {
+        "requirement_id": "FR-05",
+        "story_ids": [
+          "US-04"
+        ],
+        "acceptance_criteria_ids": [
+          "AC-06"
+        ],
+        "design_components": [
+          "Customer API",
+          "Error Handling"
+        ],
+        "code_files": [
+          "app/errors.py",
+          "app/main.py",
+          "app/service.py"
+        ],
+        "tests": [
+          "test_error_response_envelope_shape",
+          "test_missing_mandatory_email_returns_422",
+          "test_unknown_customer_returns_404"
+        ],
+        "test_outcomes": {
+          "test_error_response_envelope_shape": "passed",
+          "test_missing_mandatory_email_returns_422": "passed",
+          "test_unknown_customer_returns_404": "passed"
+        }
+      },
+      {
+        "requirement_id": "NFR-01",
+        "story_ids": [],
+        "acceptance_criteria_ids": [],
+        "design_components": [
+          "Configuration & Logging"
+        ],
+        "code_files": [
+          "app/config.py",
+          "app/logging_config.py"
+        ],
+        "tests": [],
+        "test_outcomes": {}
+      },
+      {
+        "requirement_id": "NFR-02",
+        "story_ids": [],
+        "acceptance_criteria_ids": [],
+        "design_components": [
+          "Audit Service"
+        ],
+        "code_files": [
+          "app/audit.py"
+        ],
+        "tests": [],
+        "test_outcomes": {}
+      },
+      {
+        "requirement_id": "NFR-03",
+        "story_ids": [],
+        "acceptance_criteria_ids": [],
+        "design_components": [],
+        "code_files": [],
+        "tests": [],
+        "test_outcomes": {}
+      },
+      {
+        "requirement_id": "NFR-04",
+        "story_ids": [],
+        "acceptance_criteria_ids": [],
+        "design_components": [
+          "Configuration & Logging"
+        ],
+        "code_files": [
+          "app/logging_config.py"
+        ],
+        "tests": [],
+        "test_outcomes": {}
+      }
+    ],
+    "requirement_coverage": 100.0,
+    "acceptance_criteria_coverage": 100.0,
+    "tests_with_results": 100.0,
+    "unmapped_requirements": [],
+    "unmapped_acceptance_criteria": []
+  },
+  "tool_runs": [
+    {
+      "tool": "build",
+      "status": "passed",
+      "summary": "compileall ok; import app.main ok",
+      "started_at": "2026-10-27T07:23:17+00:00",
+      "duration_seconds": 0.488,
+      "command": "/usr/local/bin/python -B -m compileall -q app tests && /usr/local/bin/python -B -c import app.main",
+      "raw_output": "",
+      "findings": [],
+      "test_results": [],
+      "metrics": {}
+    },
+    {
+      "tool": "pytest",
+      "status": "passed",
+      "summary": "15 passed, 0 failed/errored, 0 skipped",
+      "started_at": "2026-10-27T07:23:18+00:00",
+      "duration_seconds": 0.948,
+      "command": "/usr/local/bin/python -B -m pytest -q --junitxml /tmp/sdlc-sample/ws/feat-2c4294e0/.sdlc/junit.xml tests",
+      "raw_output": "...............                                                          [100%]\n15 passed in 0.12s",
+      "findings": [],
+      "test_results": [
+        {
+          "name": "test_update_contact_success_returns_updated_contact",
+          "outcome": "passed",
+          "duration": 0.007,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-01"
+          ]
+        },
+        {
+          "name": "test_update_contact_persists_and_is_readable",
+          "outcome": "passed",
+          "duration": 0.008,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-01"
+          ]
+        },
+        {
+          "name": "test_missing_mandatory_email_returns_422",
+          "outcome": "passed",
+          "duration": 0.004,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-02",
+            "AC-06"
+          ]
+        },
+        {
+          "name": "test_invalid_email_format_returns_422",
+          "outcome": "passed",
+          "duration": 0.004,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-02"
+          ]
+        },
+        {
+          "name": "test_missing_address_city_returns_422",
+          "outcome": "passed",
+          "duration": 0.003,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-02"
+          ]
+        },
+        {
+          "name": "test_phone_boundary_min_and_max_length_accepted",
+          "outcome": "passed",
+          "duration": 0.008,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-02"
+          ]
+        },
+        {
+          "name": "test_phone_outside_boundary_rejected",
+          "outcome": "passed",
+          "duration": 0.007,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-02"
+          ]
+        },
+        {
+          "name": "test_missing_token_returns_401",
+          "outcome": "passed",
+          "duration": 0.003,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-03"
+          ]
+        },
+        {
+          "name": "test_tampered_token_returns_401",
+          "outcome": "passed",
+          "duration": 0.003,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-03"
+          ]
+        },
+        {
+          "name": "test_other_customer_cannot_modify_returns_403_and_no_change",
+          "outcome": "passed",
+          "duration": 0.007,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-04"
+          ]
+        },
+        {
+          "name": "test_audit_endpoint_requires_owner",
+          "outcome": "passed",
+          "duration": 0.004,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-04",
+            "AC-05"
+          ]
+        },
+        {
+          "name": "test_unknown_customer_returns_404",
+          "outcome": "passed",
+          "duration": 0.003,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-06"
+          ]
+        },
+        {
+          "name": "test_error_response_envelope_shape",
+          "outcome": "passed",
+          "duration": 0.003,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-06"
+          ]
+        },
+        {
+          "name": "test_audit_record_created_with_before_and_after",
+          "outcome": "passed",
+          "duration": 0.006,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-05"
+          ]
+        },
+        {
+          "name": "test_failed_update_creates_no_audit_record",
+          "outcome": "passed",
+          "duration": 0.008,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-04",
+            "AC-05"
+          ]
+        }
+      ],
+      "metrics": {
+        "passed": 15,
+        "failed": 0,
+        "total": 15
+      }
+    },
+    {
+      "tool": "ruff",
+      "status": "passed",
+      "summary": "1 violation(s), 0 critical",
+      "started_at": "2026-10-27T07:23:18+00:00",
+      "duration_seconds": 0.014,
+      "command": "/root/.local/bin/ruff check --isolated --select E,F,W,B,I --ignore E501 --exclude .sdlc,.cache,__pycache__ --output-format json --no-cache .",
+      "raw_output": "4e0/app/config.py\",\n    \"fix\": {\n      \"applicability\": \"safe\",\n      \"edits\": [\n        {\n          \"content\": \"\",\n          \"end_location\": {\n            \"column\": 1,\n            \"row\": 8\n          },\n          \"location\": {\n            \"column\": 1,\n            \"row\": 7\n          }\n        }\n      ],\n      \"message\": \"Remove unused import: `sys`\"\n    },\n    \"location\": {\n      \"column\": 8,\n      \"row\": 7\n    },\n    \"message\": \"`sys` imported but unused\",\n    \"name\": \"unused-import\",\n    \"noqa_row\": 7,\n    \"severity\": \"error\",\n    \"url\": \"https://docs.astral.sh/ruff/rules/unused-import\"\n  }\n]",
+      "findings": [
+        {
+          "id": "RUFF-01",
+          "severity": "LOW",
+          "component": "app",
+          "finding": "F401: `sys` imported but unused",
+          "evidence": "app/config.py:7",
+          "recommended_fix": "Remove unused import: `sys`",
+          "source": "ruff",
+          "category": "F401",
+          "file": "app/config.py",
+          "line": 7,
+          "status": "open",
+          "iteration": 0
+        }
+      ],
+      "test_results": [],
+      "metrics": {
+        "violations": 1,
+        "critical": 0
+      }
+    },
+    {
+      "tool": "ast",
+      "status": "passed",
+      "summary": "10 files, 42 functions, max complexity 4, 0 structural finding(s)",
+      "started_at": "2026-10-27T07:23:18+00:00",
+      "duration_seconds": 0.011,
+      "command": "ast.parse(app/**/*.py)",
+      "raw_output": "",
+      "findings": [],
+      "test_results": [],
+      "metrics": {
+        "files": 10,
+        "functions": 42,
+        "max_complexity": 4
+      }
+    },
+    {
+      "tool": "bandit",
+      "status": "passed",
+      "summary": "1 issue(s): B105",
+      "started_at": "2026-10-27T07:23:18+00:00",
+      "duration_seconds": 0.264,
+      "command": "/usr/local/bin/bandit -q -f json -r app",
+      "raw_output": "\n      \"SEVERITY.HIGH\": 0,\n      \"SEVERITY.LOW\": 0,\n      \"SEVERITY.MEDIUM\": 0,\n      \"SEVERITY.UNDEFINED\": 0,\n      \"loc\": 48,\n      \"nosec\": 0,\n      \"skipped_tests\": 0\n    }\n  },\n  \"results\": [\n    {\n      \"code\": \"13 # Signing key used to validate bearer tokens.\\n14 JWT_SECRET = \\\"hardcoded-dev-secret-9f8e7d6c5b4a3210\\\"\\n15 \\n\",\n      \"col_offset\": 13,\n      \"end_col_offset\": 52,\n      \"filename\": \"app/config.py\",\n      \"issue_confidence\": \"MEDIUM\",\n      \"issue_cwe\": {\n        \"id\": 259,\n        \"link\": \"https://cwe.mitre.org/data/definitions/259.html\"\n      },\n      \"issue_severity\": \"LO",
+      "findings": [
+        {
+          "id": "BANDIT-01",
+          "severity": "LOW",
+          "component": "app/config.py",
+          "finding": "B105 hardcoded_password_string: Possible hardcoded password: 'hardcoded-dev-secret-9f8e7d6c5b4a3210'",
+          "evidence": "app/config.py:14 (confidence MEDIUM) 13 # Signing key used to validate bearer tokens.\n14 JWT_SECRET = \"hardcoded-dev-secret-9f8e7d6c5b4a3210\"\n15",
+          "recommended_fix": "https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html",
+          "source": "bandit",
+          "category": "B105",
+          "file": "app/config.py",
+          "line": 14,
+          "status": "open",
+          "iteration": 0
+        }
+      ],
+      "test_results": [],
+      "metrics": {
+        "issues": 1,
+        "blocking": 0
+      }
+    },
+    {
+      "tool": "secrets",
+      "status": "failed",
+      "summary": "1 exposed credential(s), 0 low-risk match(es)",
+      "started_at": "2026-10-27T07:23:18+00:00",
+      "duration_seconds": 0.008,
+      "command": "secret-scan (regex, workspace files)",
+      "raw_output": "",
+      "findings": [
+        {
+          "id": "SECRETS-01",
+          "severity": "HIGH",
+          "component": "app/config.py",
+          "finding": "Possible hardcoded credential committed to source",
+          "evidence": "app/config.py:14: JWT_SECRET = \"hardcoded-dev-secret-9f8e7d6c5b4a3210\"",
+          "recommended_fix": "Load the value from an environment variable or secrets manager and rotate the exposed credential",
+          "source": "secrets",
+          "category": "hardcoded_credential",
+          "file": "app/config.py",
+          "line": 14,
+          "status": "open",
+          "iteration": 0
+        }
+      ],
+      "test_results": [],
+      "metrics": {
+        "exposed": 1,
+        "matches": 1
+      }
+    },
+    {
+      "tool": "pip_audit",
+      "status": "skipped",
+      "summary": "dependency audit disabled (SDLC_ENABLE_PIP_AUDIT=false)",
+      "started_at": "2026-10-27T07:23:18+00:00",
+      "duration_seconds": 0.0,
+      "command": "pip-audit",
+      "raw_output": "",
+      "findings": [],
+      "test_results": [],
+      "metrics": {}
+    },
+    {
+      "tool": "build",
+      "status": "passed",
+      "summary": "compileall ok; import app.main ok",
+      "started_at": "2026-10-27T07:23:19+00:00",
+      "duration_seconds": 0.461,
+      "command": "/usr/local/bin/python -B -m compileall -q app tests && /usr/local/bin/python -B -c import app.main",
+      "raw_output": "",
+      "findings": [],
+      "test_results": [],
+      "metrics": {}
+    },
+    {
+      "tool": "pytest",
+      "status": "passed",
+      "summary": "15 passed, 0 failed/errored, 0 skipped",
+      "started_at": "2026-10-27T07:23:20+00:00",
+      "duration_seconds": 0.875,
+      "command": "/usr/local/bin/python -B -m pytest -q --junitxml /tmp/sdlc-sample/ws/feat-2c4294e0/.sdlc/junit.xml tests",
+      "raw_output": "...............                                                          [100%]\n15 passed in 0.15s",
+      "findings": [],
+      "test_results": [
+        {
+          "name": "test_update_contact_success_returns_updated_contact",
+          "outcome": "passed",
+          "duration": 0.01,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-01"
+          ]
+        },
+        {
+          "name": "test_update_contact_persists_and_is_readable",
+          "outcome": "passed",
+          "duration": 0.019,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-01"
+          ]
+        },
+        {
+          "name": "test_missing_mandatory_email_returns_422",
+          "outcome": "passed",
+          "duration": 0.005,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-02",
+            "AC-06"
+          ]
+        },
+        {
+          "name": "test_invalid_email_format_returns_422",
+          "outcome": "passed",
+          "duration": 0.005,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-02"
+          ]
+        },
+        {
+          "name": "test_missing_address_city_returns_422",
+          "outcome": "passed",
+          "duration": 0.005,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-02"
+          ]
+        },
+        {
+          "name": "test_phone_boundary_min_and_max_length_accepted",
+          "outcome": "passed",
+          "duration": 0.01,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-02"
+          ]
+        },
+        {
+          "name": "test_phone_outside_boundary_rejected",
+          "outcome": "passed",
+          "duration": 0.01,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-02"
+          ]
+        },
+        {
+          "name": "test_missing_token_returns_401",
+          "outcome": "passed",
+          "duration": 0.004,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-03"
+          ]
+        },
+        {
+          "name": "test_tampered_token_returns_401",
+          "outcome": "passed",
+          "duration": 0.004,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-03"
+          ]
+        },
+        {
+          "name": "test_other_customer_cannot_modify_returns_403_and_no_change",
+          "outcome": "passed",
+          "duration": 0.01,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-04"
+          ]
+        },
+        {
+          "name": "test_audit_endpoint_requires_owner",
+          "outcome": "passed",
+          "duration": 0.004,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-04",
+            "AC-05"
+          ]
+        },
+        {
+          "name": "test_unknown_customer_returns_404",
+          "outcome": "passed",
+          "duration": 0.004,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-06"
+          ]
+        },
+        {
+          "name": "test_error_response_envelope_shape",
+          "outcome": "passed",
+          "duration": 0.003,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-06"
+          ]
+        },
+        {
+          "name": "test_audit_record_created_with_before_and_after",
+          "outcome": "passed",
+          "duration": 0.007,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-05"
+          ]
+        },
+        {
+          "name": "test_failed_update_creates_no_audit_record",
+          "outcome": "passed",
+          "duration": 0.007,
+          "message": "",
+          "acceptance_criteria_ids": [
+            "AC-04",
+            "AC-05"
+          ]
+        }
+      ],
+      "metrics": {
+        "passed": 15,
+        "failed": 0,
+        "total": 15
+      }
+    },
+    {
+      "tool": "ruff",
+      "status": "passed",
+      "summary": "0 violation(s), 0 critical",
+      "started_at": "2026-10-27T07:23:20+00:00",
+      "duration_seconds": 0.011,
+      "command": "/root/.local/bin/ruff check --isolated --select E,F,W,B,I --ignore E501 --exclude .sdlc,.cache,__pycache__ --output-format json --no-cache .",
+      "raw_output": "[]",
+      "findings": [],
+      "test_results": [],
+      "metrics": {
+        "violations": 0,
+        "critical": 0
+      }
+    },
+    {
+      "tool": "ast",
+      "status": "passed",
+      "summary": "10 files, 43 functions, max complexity 4, 0 structural finding(s)",
+      "started_at": "2026-10-27T07:23:20+00:00",
+      "duration_seconds": 0.015,
+      "command": "ast.parse(app/**/*.py)",
+      "raw_output": "",
+      "findings": [],
+      "test_results": [],
+      "metrics": {
+        "files": 10,
+        "functions": 43,
+        "max_complexity": 4
+      }
+    },
+    {
+      "tool": "bandit",
+      "status": "passed",
+      "summary": "no issues",
+      "started_at": "2026-10-27T07:23:20+00:00",
+      "duration_seconds": 0.272,
+      "command": "/usr/local/bin/bandit -q -f json -r app",
+      "raw_output": "CONFIDENCE.LOW\": 0,\n      \"CONFIDENCE.MEDIUM\": 0,\n      \"CONFIDENCE.UNDEFINED\": 0,\n      \"SEVERITY.HIGH\": 0,\n      \"SEVERITY.LOW\": 0,\n      \"SEVERITY.MEDIUM\": 0,\n      \"SEVERITY.UNDEFINED\": 0,\n      \"loc\": 52,\n      \"nosec\": 0,\n      \"skipped_tests\": 0\n    },\n    \"app/service.py\": {\n      \"CONFIDENCE.HIGH\": 0,\n      \"CONFIDENCE.LOW\": 0,\n      \"CONFIDENCE.MEDIUM\": 0,\n      \"CONFIDENCE.UNDEFINED\": 0,\n      \"SEVERITY.HIGH\": 0,\n      \"SEVERITY.LOW\": 0,\n      \"SEVERITY.MEDIUM\": 0,\n      \"SEVERITY.UNDEFINED\": 0,\n      \"loc\": 48,\n      \"nosec\": 0,\n      \"skipped_tests\": 0\n    }\n  },\n  \"results\": []\n}",
+      "findings": [],
+      "test_results": [],
+      "metrics": {
+        "issues": 0,
+        "blocking": 0
+      }
+    },
+    {
+      "tool": "secrets",
+      "status": "passed",
+      "summary": "0 exposed credential(s), 0 low-risk match(es)",
+      "started_at": "2026-10-27T07:23:20+00:00",
+      "duration_seconds": 0.005,
+      "command": "secret-scan (regex, workspace files)",
+      "raw_output": "",
+      "findings": [],
+      "test_results": [],
+      "metrics": {
+        "exposed": 0,
+        "matches": 0
+      }
+    },
+    {
+      "tool": "pip_audit",
+      "status": "skipped",
+      "summary": "dependency audit disabled (SDLC_ENABLE_PIP_AUDIT=false)",
+      "started_at": "2026-10-27T07:23:20+00:00",
+      "duration_seconds": 0.0,
+      "command": "pip-audit",
+      "raw_output": "",
+      "findings": [],
+      "test_results": [],
+      "metrics": {}
+    }
+  ],
+  "gate_results": [
+    {
+      "gate": "requirement",
+      "mandatory": true,
+      "passed": true,
+      "checks": [
+        {
+          "name": "acceptance_criteria_defined",
+          "passed": true,
+          "evidence": "6 AC for 4 stories"
+        },
+        {
+          "name": "ambiguities_identified",
+          "passed": true,
+          "evidence": "4 ambiguities, 4 assumptions, 3 questions surfaced for human confirmation"
+        },
+        {
+          "name": "mandatory_nfrs_considered",
+          "passed": true,
+          "evidence": "4 NFRs; all required categories covered"
+        }
+      ],
+      "evaluated_at": "2026-10-27T07:23:16+00:00",
+      "iteration": 0
+    },
+    {
+      "gate": "code",
+      "mandatory": true,
+      "passed": true,
+      "checks": [
+        {
+          "name": "build_succeeds",
+          "passed": true,
+          "evidence": "compileall ok; import app.main ok"
+        },
+        {
+          "name": "static_analysis_completed",
+          "passed": true,
+          "evidence": "1 violation(s), 0 critical"
+        },
+        {
+          "name": "no_critical_violations",
+          "passed": true,
+          "evidence": "0 critical static-analysis finding(s)"
+        }
+      ],
+      "evaluated_at": "2026-10-27T07:23:18+00:00",
+      "iteration": 0
+    },
+    {
+      "gate": "test",
+      "mandatory": true,
+      "passed": true,
+      "checks": [
+        {
+          "name": "mandatory_tests_executed",
+          "passed": true,
+          "evidence": "15 tests executed (minimum 5)"
+        },
+        {
+          "name": "required_tests_pass",
+          "passed": true,
+          "evidence": "15 passed, 0 failed/errored, 0 skipped"
+        },
+        {
+          "name": "acceptance_criteria_have_tests",
+          "passed": true,
+          "evidence": "6/6 acceptance criteria mapped to tests"
+        }
+      ],
+      "evaluated_at": "2026-10-27T07:23:18+00:00",
+      "iteration": 0
+    },
+    {
+      "gate": "security",
+      "mandatory": true,
+      "passed": false,
+      "checks": [
+        {
+          "name": "no_blocking_security_findings",
+          "passed": false,
+          "evidence": "2 open blocking security finding(s): SECRETS-01, SEC-01"
+        },
+        {
+          "name": "no_exposed_credentials",
+          "passed": false,
+          "evidence": "1 exposed credential(s), 0 low-risk match(es)"
+        },
+        {
+          "name": "required_security_checks_completed",
+          "passed": true,
+          "evidence": "required scanners ['bandit', 'secrets'] all completed"
+        }
+      ],
+      "evaluated_at": "2026-10-27T07:23:18+00:00",
+      "iteration": 0
+    },
+    {
+      "gate": "code",
+      "mandatory": true,
+      "passed": true,
+      "checks": [
+        {
+          "name": "build_succeeds",
+          "passed": true,
+          "evidence": "compileall ok; import app.main ok"
+        },
+        {
+          "name": "static_analysis_completed",
+          "passed": true,
+          "evidence": "0 violation(s), 0 critical"
+        },
+        {
+          "name": "no_critical_violations",
+          "passed": true,
+          "evidence": "0 critical static-analysis finding(s)"
+        }
+      ],
+      "evaluated_at": "2026-10-27T07:23:20+00:00",
+      "iteration": 1
+    },
+    {
+      "gate": "test",
+      "mandatory": true,
+      "passed": true,
+      "checks": [
+        {
+          "name": "mandatory_tests_executed",
+          "passed": true,
+          "evidence": "15 tests executed (minimum 5)"
+        },
+        {
+          "name": "required_tests_pass",
+          "passed": true,
+          "evidence": "15 passed, 0 failed/errored, 0 skipped"
+        },
+        {
+          "name": "acceptance_criteria_have_tests",
+          "passed": true,
+          "evidence": "6/6 acceptance criteria mapped to tests"
+        }
+      ],
+      "evaluated_at": "2026-10-27T07:23:20+00:00",
+      "iteration": 1
+    },
+    {
+      "gate": "security",
+      "mandatory": true,
+      "passed": true,
+      "checks": [
+        {
+          "name": "no_blocking_security_findings",
+          "passed": true,
+          "evidence": "0 open blocking security finding(s)"
+        },
+        {
+          "name": "no_exposed_credentials",
+          "passed": true,
+          "evidence": "0 exposed credential(s), 0 low-risk match(es)"
+        },
+        {
+          "name": "required_security_checks_completed",
+          "passed": true,
+          "evidence": "required scanners ['bandit', 'secrets'] all completed"
+        }
+      ],
+      "evaluated_at": "2026-10-27T07:23:20+00:00",
+      "iteration": 1
+    },
+    {
+      "gate": "traceability",
+      "mandatory": true,
+      "passed": true,
+      "checks": [
+        {
+          "name": "requirements_mapped_to_code",
+          "passed": true,
+          "evidence": "100% of requirements mapped to code (min 100%)"
+        },
+        {
+          "name": "acceptance_criteria_mapped_to_tests",
+          "passed": true,
+          "evidence": "100% of AC mapped to tests (min 100%)"
+        },
+        {
+          "name": "tests_have_execution_results",
+          "passed": true,
+          "evidence": "100% of mapped tests have execution results"
+        }
+      ],
+      "evaluated_at": "2026-10-27T07:23:20+00:00",
+      "iteration": 1
+    },
+    {
+      "gate": "release",
+      "mandatory": true,
+      "passed": true,
+      "checks": [
+        {
+          "name": "mandatory_gates_passed",
+          "passed": true,
+          "evidence": "all mandatory gates passed"
+        },
+        {
+          "name": "no_unresolved_blocking_defects",
+          "passed": true,
+          "evidence": "0 open CRITICAL/HIGH finding(s)"
+        },
+        {
+          "name": "required_human_approvals_recorded",
+          "passed": true,
+          "evidence": "design approved"
+        }
+      ],
+      "evaluated_at": "2026-10-27T07:23:20+00:00",
+      "iteration": 1
+    }
+  ],
+  "findings": [
+    {
+      "id": "RUFF-01",
+      "severity": "LOW",
+      "component": "app",
+      "finding": "F401: `sys` imported but unused",
+      "evidence": "app/config.py:7",
+      "recommended_fix": "Remove unused import: `sys`",
+      "source": "ruff",
+      "category": "F401",
+      "file": "app/config.py",
+      "line": 7,
+      "status": "resolved",
+      "iteration": 0
+    },
+    {
+      "id": "BANDIT-01",
+      "severity": "LOW",
+      "component": "app/config.py",
+      "finding": "B105 hardcoded_password_string: Possible hardcoded password: 'hardcoded-dev-secret-9f8e7d6c5b4a3210'",
+      "evidence": "app/config.py:14 (confidence MEDIUM) 13 # Signing key used to validate bearer tokens.\n14 JWT_SECRET = \"hardcoded-dev-secret-9f8e7d6c5b4a3210\"\n15",
+      "recommended_fix": "https://bandit.readthedocs.io/en/1.9.4/plugins/b105_hardcoded_password_string.html",
+      "source": "bandit",
+      "category": "B105",
+      "file": "app/config.py",
+      "line": 14,
+      "status": "resolved",
+      "iteration": 0
+    },
+    {
+      "id": "SECRETS-01",
+      "severity": "HIGH",
+      "component": "app/config.py",
+      "finding": "Possible hardcoded credential committed to source",
+      "evidence": "app/config.py:14: JWT_SECRET = \"hardcoded-dev-secret-9f8e7d6c5b4a3210\"",
+      "recommended_fix": "Load the value from an environment variable or secrets manager and rotate the exposed credential",
+      "source": "secrets",
+      "category": "hardcoded_credential",
+      "file": "app/config.py",
+      "line": 14,
+      "status": "resolved",
+      "iteration": 0
+    },
+    {
+      "id": "REV-01",
+      "severity": "MEDIUM",
+      "component": "Profile Service",
+      "finding": "Authorization and lookup are repeated in get_contact and update_contact; a shared _load_owned_customer helper would remove the duplicate 404 handling.",
+      "evidence": "app/service.py: both methods call _authorize() then customers.get() inside try/except CustomerNotFound.",
+      "recommended_fix": "Extract a private helper that authorizes and loads the record, used by both methods.",
+      "source": "ai_review",
+      "category": "duplicate_logic",
+      "file": "app/service.py",
+      "line": 36,
+      "status": "open",
+      "iteration": 0
+    },
+    {
+      "id": "REV-02",
+      "severity": "LOW",
+      "component": "Repository",
+      "finding": "Module-level singletons (customers, audits) make the data layer hard to swap in tests and for a future PostgreSQL implementation.",
+      "evidence": "app/repository.py: `customers = CustomerRepository()` / `audits = AuditRepository()` imported directly by main.py.",
+      "recommended_fix": "Provide the repositories through FastAPI dependencies or an app-state container.",
+      "source": "ai_review",
+      "category": "testability",
+      "file": "app/repository.py",
+      "line": 117,
+      "status": "open",
+      "iteration": 0
+    },
+    {
+      "id": "REV-03",
+      "severity": "LOW",
+      "component": "Customer API",
+      "finding": "The GET audit endpoint returns the full list; for long-lived customers this grows unbounded (potential performance concern).",
+      "evidence": "app/main.py audit_history returns every entry from service.audit_history().",
+      "recommended_fix": "Add limit/offset pagination query parameters.",
+      "source": "ai_review",
+      "category": "performance",
+      "file": "app/main.py",
+      "line": 55,
+      "status": "open",
+      "iteration": 0
+    },
+    {
+      "id": "REV-04",
+      "severity": "LOW",
+      "component": "Configuration & Logging",
+      "finding": "Dead import: `sys` is imported but never used.",
+      "evidence": "app/config.py line 7: import sys",
+      "recommended_fix": "Remove the unused import.",
+      "source": "ai_review",
+      "category": "dead_code",
+      "file": "app/config.py",
+      "line": 7,
+      "status": "resolved",
+      "iteration": 0
+    },
+    {
+      "id": "SEC-01",
+      "severity": "HIGH",
+      "component": "Configuration & Logging",
+      "finding": "The bearer-token signing key is hard-coded in source (secrets exposure). Anyone with repository access can forge tokens for any customer, defeating the authorization control.",
+      "evidence": "app/config.py: JWT_SECRET = \"hardcoded-dev-secret-...\"",
+      "recommended_fix": "Load the key from the JWT_SECRET environment variable (or a secrets manager) and fail fast when it is missing.",
+      "source": "security_agent",
+      "category": "secrets_exposure",
+      "file": "app/config.py",
+      "line": 14,
+      "status": "resolved",
+      "iteration": 0
+    },
+    {
+      "id": "SEC-02",
+      "severity": "MEDIUM",
+      "component": "Authentication",
+      "finding": "No rate limiting or lockout on repeated invalid-token attempts; signature guessing is impractical with HMAC-SHA256 but the endpoint can be abused for enumeration of customer ids via 403 vs 404 responses.",
+      "evidence": "app/auth.py verify_token raises 401 immediately; app/service.py returns 403 before 404 so an attacker with a valid token cannot enumerate ids, but unauthenticated callers receive distinct 401/422 behaviour.",
+      "recommended_fix": "Add a rate limiter (e.g. per token / per IP) at the gateway and keep the 403-before-404 ordering.",
+      "source": "security_agent",
+      "category": "authentication_controls",
+      "file": "app/auth.py",
+      "line": 30,
+      "status": "open",
+      "iteration": 0
+    },
+    {
+      "id": "SEC-03",
+      "severity": "LOW",
+      "component": "Audit Service",
+      "finding": "Audit entries store full before/after contact details (PII); retention and access controls for the audit store must be defined.",
+      "evidence": "app/audit.py _contact_view stores email, phone and address verbatim.",
+      "recommended_fix": "Apply the organisation's PII retention policy to the audit store and restrict read access.",
+      "source": "security_agent",
+      "category": "logging_sensitive_information",
+      "file": "app/audit.py",
+      "line": 40,
+      "status": "open",
+      "iteration": 0
+    }
+  ],
+  "modifications": [
+    {
+      "id": "MOD-01",
+      "iteration": 1,
+      "file": "app/config.py",
+      "diff": "--- a/app/config.py\n+++ b/app/config.py\n@@ -1,17 +1,28 @@\n \"\"\"Application configuration.\n+\n+Secrets are never stored in source: the token signing key is injected through the\n+``JWT_SECRET`` environment variable and read lazily so the module can be imported\n+(for builds, docs generation, tests) before the deployment environment is wired up.\n \n Implements: NFR-01 (security configuration), NFR-04 (logging configuration)\n \"\"\"\n \n import os\n-import sys\n \n SERVICE_NAME = \"customer-contact-api\"\n LOG_LEVEL = \"INFO\"\n TOKEN_TTL_SECONDS = 3600\n \n-# Signing key used to validate bearer tokens.\n-JWT_SECRET = \"hardcoded-dev-secret-9f8e7d6c5b4a3210\"\n+\n+class MissingConfiguration(RuntimeError):\n+    pass\n+\n+\n+def _require_env(name: str) -> str:\n+    value = os.environ.get(name, \"\").strip()\n+    if not value:\n+        raise MissingConfiguration(f\"Required environment variable {name} is not set\")\n+    return value\n \n \n class Settings:\n@@ -20,7 +31,7 @@\n \n     @property\n     def jwt_secret(self) -> str:\n-        return JWT_SECRET\n+        return _require_env(\"JWT_SECRET\")\n \n     @property\n     def environment(self) -> str:\n",
+      "reason": "Read JWT_SECRET lazily from the environment through a Settings property so the module stays importable for builds and tests while the literal secret is removed; also drops the unused `sys` import flagged by static analysis.",
+      "proposed_at": "2026-10-27T07:23:18+00:00",
+      "approved_by": "developer",
+      "applied_at": "2026-10-27T07:23:18+00:00",
+      "before_hash": "60925e2fd7bad395",
+      "after_hash": "2d05acd5691a31e5"
+    }
+  ],
+  "approvals": [
+    {
+      "checkpoint": "design",
+      "decision": "approve",
+      "approver": "developer",
+      "comment": "cli",
+      "recorded_at": "2026-10-27T07:23:17+00:00",
+      "iteration": 0
+    },
+    {
+      "checkpoint": "remediation",
+      "decision": "approve",
+      "approver": "developer",
+      "comment": "cli",
+      "recorded_at": "2026-10-27T07:23:18+00:00",
+      "iteration": 1
+    },
+    {
+      "checkpoint": "release",
+      "decision": "approve",
+      "approver": "developer",
+      "comment": "cli",
+      "recorded_at": "2026-10-27T07:23:20+00:00",
+      "iteration": 1
+    }
+  ],
+  "transitions": [
+    {
+      "from_stage": "received",
+      "to_stage": "analyzing_requirement",
+      "at": "2026-10-27T07:23:16+00:00",
+      "note": ""
+    },
+    {
+      "from_stage": "analyzing_requirement",
+      "to_stage": "requirement_gate",
+      "at": "2026-10-27T07:23:16+00:00",
+      "note": ""
+    },
+    {
+      "from_stage": "requirement_gate",
+      "to_stage": "designing",
+      "at": "2026-10-27T07:23:16+00:00",
+      "note": ""
+    },
+    {
+      "from_stage": "designing",
+      "to_stage": "awaiting_design_approval",
+      "at": "2026-10-27T07:23:17+00:00",
+      "note": ""
+    },
+    {
+      "from_stage": "awaiting_design_approval",
+      "to_stage": "generating_code",
+      "at": "2026-10-27T07:23:17+00:00",
+      "note": "design approved"
+    },
+    {
+      "from_stage": "generating_code",
+      "to_stage": "generating_tests",
+      "at": "2026-10-27T07:23:17+00:00",
+      "note": ""
+    },
+    {
+      "from_stage": "generating_tests",
+      "to_stage": "executing_tests",
+      "at": "2026-10-27T07:23:17+00:00",
+      "note": ""
+    },
+    {
+      "from_stage": "executing_tests",
+      "to_stage": "static_analysis",
+      "at": "2026-10-27T07:23:18+00:00",
+      "note": ""
+    },
+    {
+      "from_stage": "static_analysis",
+      "to_stage": "security_validation",
+      "at": "2026-10-27T07:23:18+00:00",
+      "note": ""
+    },
+    {
+      "from_stage": "security_validation",
+      "to_stage": "ai_code_review",
+      "at": "2026-10-27T07:23:18+00:00",
+      "note": ""
+    },
+    {
+      "from_stage": "ai_code_review",
+      "to_stage": "evaluating_gates",
+      "at": "2026-10-27T07:23:18+00:00",
+      "note": ""
+    },
+    {
+      "from_stage": "evaluating_gates",
+      "to_stage": "remediating",
+      "at": "2026-10-27T07:23:18+00:00",
+      "note": ""
+    },
+    {
+      "from_stage": "remediating",
+      "to_stage": "awaiting_remediation_approval",
+      "at": "2026-10-27T07:23:18+00:00",
+      "note": ""
+    },
+    {
+      "from_stage": "awaiting_remediation_approval",
+      "to_stage": "revalidating",
+      "at": "2026-10-27T07:23:18+00:00",
+      "note": "correction applied"
+    },
+    {
+      "from_stage": "revalidating",
+      "to_stage": "evaluating_gates",
+      "at": "2026-10-27T07:23:20+00:00",
+      "note": ""
+    },
+    {
+      "from_stage": "evaluating_gates",
+      "to_stage": "traceability_check",
+      "at": "2026-10-27T07:23:20+00:00",
+      "note": ""
+    },
+    {
+      "from_stage": "traceability_check",
+      "to_stage": "release_assessment",
+      "at": "2026-10-27T07:23:20+00:00",
+      "note": ""
+    },
+    {
+      "from_stage": "release_assessment",
+      "to_stage": "awaiting_release_approval",
+      "at": "2026-10-27T07:23:20+00:00",
+      "note": ""
+    },
+    {
+      "from_stage": "awaiting_release_approval",
+      "to_stage": "completed",
+      "at": "2026-10-27T07:23:20+00:00",
+      "note": "release approved"
+    }
+  ],
+  "snapshots": [
+    {
+      "iteration": 0,
+      "tests_passed": 15,
+      "tests_failed": 0,
+      "findings_by_severity": {
+        "HIGH": 2,
+        "LOW": 6,
+        "MEDIUM": 2
+      },
+      "gate_status": {
+        "requirement": true,
+        "code": true,
+        "test": true,
+        "security": false
+      },
+      "captured_at": "2026-10-27T07:23:18+00:00"
+    },
+    {
+      "iteration": 1,
+      "tests_passed": 15,
+      "tests_failed": 0,
+      "findings_by_severity": {
+        "LOW": 3,
+        "MEDIUM": 2
+      },
+      "gate_status": {
+        "requirement": true,
+        "code": true,
+        "test": true,
+        "security": true
+      },
+      "captured_at": "2026-10-27T07:23:20+00:00"
+    }
+  ],
+  "remediation_history": [
+    "iteration 1: applied fix for ['app/config.py']; claimed to address ['SECRETS-01', 'SEC-01']",
+    "iteration 1: tests 15p/0f -> 15p/0f; findings {'HIGH': 2, 'LOW': 6, 'MEDIUM': 2} -> {'LOW': 3, 'MEDIUM': 2}"
+  ],
+  "human_feedback": []
+}
