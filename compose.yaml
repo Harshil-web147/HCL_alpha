@@ -1,0 +1,18 @@
+services:
+  forge:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      DATABASE_PATH: /app/data/forge.sqlite3
+      GENERATED_PROJECTS_DIR: ${PWD}/generated_projects
+      RUNNER_IMAGE: forge-runner:local
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      REQUIRE_DEPENDENCY_AUDIT: "true"
+    volumes:
+      - ./data:/app/data
+      # Matching absolute paths let the host Docker daemon resolve runner binds.
+      - ${PWD}/generated_projects:${PWD}/generated_projects
+      - /var/run/docker.sock:/var/run/docker.sock

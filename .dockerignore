@@ -1,0 +1,9 @@
+.git
+.venv
+data
+generated_projects
+frontend/node_modules
+frontend/dist
+*.docx
+.env
+.playwright-cli

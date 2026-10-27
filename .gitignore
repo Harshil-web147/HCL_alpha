@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+data/
+generated_projects/*
+!generated_projects/.gitkeep
+frontend/node_modules/
+frontend/dist/
+*.tsbuildinfo
+.env
+.playwright-cli/
